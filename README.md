@@ -27,7 +27,8 @@ See [results and limitations](docs/RESULTS.md). A successful kernel log alone is
 2. [Agent engineering guide](docs/AGENT-GUIDE.md): investigation, porting, failure lessons
 3. [2080 Ti reproduction](docs/TURING.md): inputs, build, one-shot boot, verification, recovery
 4. [3090 experience](docs/AMPERE.md): upstream and known-working revision
-5. [Licensing/provenance](NOTICE.md)
+5. [RTX 2060 (TU104) port](docs/TU104-2060.md): source-level port, unvalidated; per-card profile generation
+6. [Licensing/provenance](NOTICE.md)
 
 ### Offline entry points
 
@@ -40,7 +41,16 @@ make test-private ASSETS=/absolute/path/to/verified/assets
 make module
 ```
 
-`make module` builds a **hardware-execution-disabled** module by default. A reviewed exact-profile experiment can opt into compilation with `make module ENABLE_EXPERIMENT=1`; runtime parameters are still required. No target installs/loads modules, edits boot configuration, flashes anything, or runs external installers.
+`make test` also runs the offline TU104 RTX 2060 host suite (synthetic
+firmware image; no assets required). `make module` builds both the validated
+TU102 pair and the **unvalidated** TU104 port (`tu104_execute.ko`,
+`tu104_diag.ko`) as hardware-execution-disabled modules by default. A reviewed
+exact-profile experiment can opt into compilation with
+`make module ENABLE_EXPERIMENT=1`; runtime parameters are still required. The
+TU104 port additionally requires a generated per-card profile via
+`tools/profile_gen.py`; see [docs/TU104-2060.md](docs/TU104-2060.md). No
+target installs/loads modules, edits boot configuration, flashes anything, or
+runs external installers.
 
 ```sh
 python3 tools/inventory.py --bdf 0000:42:00.0 --output local/inventory.json
@@ -56,6 +66,7 @@ Inventory uses OS metadata and `nvidia-smi`, not BAR mmap or resets. Output is p
 - GIGABYTE MZ32-AR0 / AMD server, separate ASPEED display, Secure Boot disabled. Shared IOMMU group observed: no bus-wide resets.
 - Turing: **one-shot only**, no module unload path, mandatory fail-closed initramfs gate. Do not make it the permanent default.
 - Ampere: external [Zagitta/gpu-unlock](https://github.com/Zagitta/gpu-unlock); not vendored here.
+- The TU104 RTX 2060 port in this fork is **source-only and unvalidated**: offline host tests with a synthetic profile pass, but no hardware run has occurred; it requires its own PROM-derived profile (see docs/TU104-2060.md).
 - Other boards, 11 GiB variants, Windows, Ada and Blackwell: **not validated here**.
 
 Public source derives from the tested source with a default-off compile gate and publication packaging changes. It is not byte-identical to the historical test binary. No public-source hardware rerun is claimed.

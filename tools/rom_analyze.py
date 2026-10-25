@@ -88,7 +88,7 @@ def parse(rom):
     fields = struct.unpack("<15I", bounded(rom, off, 60))
     desc_size = fields[0] >> 16
     if ((fields[0] >> 8) & 255) != 2 or not fields[0] & 1 or desc_size < 60:
-        raise ValueError("requires TU102 v2 descriptor")
+        raise ValueError("requires Turing-family v2 descriptor")
     if not fields[1] or fields[1] != fields[2] or fields[3]:
         raise ValueError("unsupported compressed/entry layout")
     blob = bounded(rom, off + desc_size, fields[1])
@@ -125,6 +125,8 @@ def parse(rom):
         "fwsec_image_offset": off + desc_size,
         "fwsec_bytes": len(blob),
         "fwsec_sha256": hashlib.sha256(blob).hexdigest(),
+        "fwsec_interface_word": u32(dmem, fields[4]),
+        "fwsec_interface_entries": u32(dmem, fields[4]) >> 24,
         "mapper_offset": mapper,
         "command_offset": cmd,
         "command_size": size,

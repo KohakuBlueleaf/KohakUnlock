@@ -33,8 +33,11 @@ def verify(directory, profile):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--assets', type=Path, required=True)
+    p.add_argument('--profile', type=Path,
+                   default=ROOT / 'profiles/leadtek-tu102-22g.json',
+                   help='profile JSON (default: leadtek-tu102-22g)')
     args = p.parse_args()
-    profile = json.loads((ROOT / 'profiles/leadtek-tu102-22g.json').read_text())
+    profile = json.loads(args.profile.read_text())
     results = verify(args.assets, profile)
     print(json.dumps(results, indent=2))
     return 0 if all(row['valid'] for row in results) else 1
