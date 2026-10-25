@@ -1,0 +1,40 @@
+{
+  "profile": "tu104-2060-6g-experimental",
+  "execution_supported_generically": false,
+  "hardware_validated": false,
+  "status_note": "SOURCE PORT ONLY. No hardware run on TU104. Generate the reviewed per-card constants with tools/profile_gen.py from THIS card's own PROM dump and pre-driver diagnostics; the template kernel/tu104_profile.h refuses execution until then.",
+  "chip": "TU104 (RTX 2060 variant; lspci 'TU104 [GeForce RTX 2060]')",
+  "pci_id": "10de:1e89",
+  "subsystem_id": "1458:3fc1",
+  "vram_modded": false,
+  "stock_vram_gib": 6,
+  "historical_target": "0000:01:00.0",
+  "observed": {
+    "revision": "0xa1",
+    "driver_under_test": "nvidia 550.163.01 (proprietary; post-unlock behavior unverified)",
+    "iommu_group": "1",
+    "iommu_members": ["0000:00:01.0", "0000:01:00.0", "0000:01:00.1", "0000:01:00.2", "0000:01:00.3"]
+  },
+  "pending_diag_inputs": {
+    "note": "Fill via kernel/tu104_diag.ko pre-driver snapshot, then run tools/profile_gen.py",
+    "capacity_register": null,
+    "boot0": null,
+    "workspace_register": null,
+    "wpr2_low_init": null,
+    "wpr2_high_init": null,
+    "selector0_init": null,
+    "selector1_init": null,
+    "feature_word": null,
+    "readout_word": null,
+    "gfw_word": null
+  },
+  "cmp_source": "https://github.com/Cyridd/cmpunlocker (unlock40x_v70.c; CMP 40HX = TU106 lineage)",
+  "blob_caveat": "The four pinned external blobs served CMP50HX (TU102) and CMP40HX (TU106). TU104 reuse is plausible but NOT established; obtain inputs yourself and review.",
+  "assets": [
+    {"name": "tu104-fwsec.bin", "bytes": null, "sha256": null, "origin": "own native PROM; tools/rom_analyze.py"},
+    {"name": "bl_gsp_tu102.bin", "bytes": 768, "sha256": "f21f1cfbb8fffa8067685314367fc4c50f3f84dd99eda7c19db4292d9269b9d9", "origin": "pinned CMP efi-unlock/blobs"},
+    {"name": "booter_ucode_prod.bin", "bytes": 59136, "sha256": "e0f0fc93da097b5b68e5af3adb58b2235ed1fad5fce0b23592d3895af44cb743", "origin": "pinned CMP efi-unlock/blobs"},
+    {"name": "v67_payload.bin", "bytes": 64000, "sha256": "de7288bcfb80c2d4b259a59e823c926ba0a9adcab594219cc6802c94257ce271", "origin": "pinned CMP efi-unlock/blobs"},
+    {"name": "gsp_rm_boot_dbg.bin", "bytes": 131072, "sha256": "fa43239bcee7b97ca62f007cc68487560a39e19f74f3dde7486db3f98df8e471", "origin": "pinned CMP efi-unlock/blobs; only first 0x6000 used"}
+  ]
+}

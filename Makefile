@@ -10,9 +10,13 @@ test:
 	$(CC) $(CFLAGS) $(SANITIZE) -I. tests/test_dma_host.c -o build/test_dma
 	$(CC) $(CFLAGS) $(SANITIZE) -I. tests/test_pack_host.c -o build/test_pack
 	$(CC) $(CFLAGS) $(SANITIZE) -I. tests/test_flow_host.c -o build/test_flow
+	$(CC) $(CFLAGS) $(SANITIZE) -I. tests/test_tu104_dma_host.c -o build/test_tu104_dma
+	$(CC) $(CFLAGS) $(SANITIZE) -I. -DKOH_PROFILE='"tests/profiles/tu104_synth.h"' tests/test_tu104_core.c -o build/test_tu104_core
 	./build/test_dma
 	./build/test_pack
 	./build/test_flow
+	./build/test_tu104_dma
+	./build/test_tu104_core
 	$(PYTHON) -m unittest discover -s tests -p 'test_*.py' -v
 
 test-private: test

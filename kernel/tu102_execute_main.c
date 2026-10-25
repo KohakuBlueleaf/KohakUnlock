@@ -2,11 +2,14 @@
 #include <crypto/hash.h>
 #include <linux/delay.h>
 #include <linux/firmware.h>
+#include <linux/hex.h>
 #include <linux/io.h>
 #include <linux/ktime.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/string.h>
 #include <linux/vmalloc.h>
+#include "override_compat.h"
 #include "tu102_dma.h"
 #define TX_EXPERIMENT_V4
 #include "tu102_core_port.h"
@@ -139,10 +142,9 @@ static int __init tu102_execute_init(void)
         run.pdev->subsystem_vendor != 0x107d || run.pdev->subsystem_device != 0x1e04) {
         ret = -ENODEV; goto out;
     }
-    if (run.pdev->driver_override) { ret = -EBUSY; goto out; }
-    /* device_lock is already held, matching driver_set_override's protected update. */
-    run.pdev->driver_override = kstrdup("tu102-experiment-hold", GFP_KERNEL);
-    if (!run.pdev->driver_override) { ret = -ENOMEM; goto out; }
+    if (KOH_OVERRIDE_HAS(&run.pdev->dev)) { ret = -EBUSY; goto out; }
+    /* device_lock is already held, matching the override API's protected update. */
+    if (KOH_OVERRIDE_SET(&run.pdev->dev, "tu102-experiment-hold")) { ret = -ENOMEM; goto out; }
     run.override_set = true;
     ret = pci_read_config_word(run.pdev, PCI_COMMAND, &run.command);
     if (ret || run.command == 0xffff || !(run.command & PCI_COMMAND_MEMORY)) { ret = -EACCES; goto out; }
@@ -208,9 +210,11 @@ out:
     for (i = 0; i < ARRAY_SIZE(assets); i++) { release_firmware(run.fw[i]); run.fw[i] = NULL; }
 retain:
     if (handoff_safe && run.override_set) {
-        const char *old = run.pdev->driver_override;
-        run.pdev->driver_override = NULL;
-        kfree(old);
+        if (KOH_OVERRIDE_SET(&run.pdev->dev, "")) {
+            ret = -EIO;
+            handoff_safe = false;
+            goto retain;
+        }
         run.override_set = false;
     }
     result = ret;
