@@ -102,6 +102,14 @@ Keep stock Windows Boot Manager as default. Cold-start, select USB manually, U
 once at READY. Failure recovery: full power-off and boot Windows without USB.
 No automatic installer, boot-order editing or signing keys are distributed.
 
+A USB-less layout is also supported: the EFI on the Windows ESP with the
+work tree on a separate FAT32 payload partition. Identify that partition by
+its GPT GUID, never by its index: partition numbers are not stable. On the
+tested box `diskpart` renumbered the payload from the planned partition 5 to
+partition 4 after the C: shrink, and a run pinned to the stale number failed
+(measured 2026-10-26). The GUID is unique and authoritative; the index is a
+wildcard.
+
 For Secure Boot enabled, sign a reviewed local EFI and append its public cert to
 firmware db (not shim MOK), preserving existing keys. The app does not enroll keys
 or override authentication. Cryptographic signing is not proof of firmware trust.

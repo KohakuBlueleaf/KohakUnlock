@@ -31,33 +31,13 @@ static EFI_STATUS MakeWindowsPath(VOID) {
   WindowsDevicePath=(VOID*)b;return EFI_SUCCESS;
 }
 /* Select only the existing Windows ESP queried from this local machine. */
-static BOOLEAN LocalWindowsEsp(EFI_HANDLE handle) {
-  static const EFI_GUID guid={KOH_WINDOWS_ESP_GUID};
-  EFI_DEVICE_PATH_PROTOCOL *path=NULL;
-  if(EFI_ERROR(Gu.bs->HandleProtocol(handle,&PathGuid,(VOID**)&path)) || !path)return FALSE;
-  UINTN off=0;
-  for(UINTN i=0;i<128 && off<=4092;i++) {
-    EFI_DEVICE_PATH_PROTOCOL *node=(VOID*)((UINT8*)path+off);
-    UINTN len=node->Length[0]+((UINTN)node->Length[1]<<8);
-    if(len<4 || len>4096-off)return FALSE;
-    if(node->Type==MEDIA_DEVICE_PATH && node->SubType==MEDIA_HARDDRIVE_DP) {
-      if(len!=sizeof(HARDDRIVE_DEVICE_PATH))return FALSE;
-      HARDDRIVE_DEVICE_PATH *hd=(VOID*)node;
-      return hd->SignatureType==2 && hd->MBRType==2 && hd->PartitionNumber==1 &&
-        !memcmp(hd->Signature,&guid,sizeof(guid));
-    }
-    if(node->Type==END_DEVICE_PATH_TYPE)return FALSE;
-    off+=len;
-  }
-  return FALSE;
-}
 static EFI_STATUS PreloadWindows(VOID) {
   EFI_HANDLE *h=NULL;UINTN n=0,found=0;
   EFI_STATUS s=Gu.bs->LocateHandleBuffer(ByProtocol,&FsGuid,NULL,&n,&h);
   if(EFI_ERROR(s))return s;
   if(!h||n>256){GuFree(h);return EFI_COMPROMISED_DATA;}
   for(UINTN i=0;i<n;i++) {
-    if(!LocalWindowsEsp(h[i]))continue;
+    if(!GuLocalEsp(h[i]))continue;
     EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs=NULL;EFI_FILE_PROTOCOL *root=NULL,*file=NULL;
     EFI_STATUS x=Gu.bs->HandleProtocol(h[i],&FsGuid,(VOID**)&fs);
     if(!EFI_ERROR(x)&&fs)x=fs->OpenVolume(fs,&root);

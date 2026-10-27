@@ -2,6 +2,7 @@
 #include "app_io.h"
 #include "compat/compat.h"
 #include "format.h"
+#include "local_profile.h"
 #include "sha256.h"
 #include <Protocol/LoadedImage.h>
 #include <Protocol/SimpleFileSystem.h>
@@ -59,6 +60,55 @@ static BOOLEAN UsbPath(EFI_HANDLE Handle) {
   }
   return FALSE;
 }
+static BOOLEAN EspGuidPath(EFI_HANDLE Handle,const EFI_GUID *Want,UINT32 Partition) {
+  EFI_DEVICE_PATH_PROTOCOL *path=NULL;
+  if(EFI_ERROR(Table->BootServices->HandleProtocol(Handle,&PathGuid,(VOID **)&path)) || !path)return FALSE;
+  UINTN off=0;
+  for(UINTN i=0;i<128 && off<=4092;i++) {
+    EFI_DEVICE_PATH_PROTOCOL *node=(VOID*)((UINT8*)path+off);
+    UINTN len=node->Length[0]+((UINTN)node->Length[1]<<8);
+    if(len<4 || len>4096-off)return FALSE;
+    if(node->Type==MEDIA_DEVICE_PATH && node->SubType==MEDIA_HARDDRIVE_DP) {
+      if(len!=sizeof(HARDDRIVE_DEVICE_PATH))return FALSE;
+      HARDDRIVE_DEVICE_PATH *hd=(VOID*)node;
+      return hd->SignatureType==2 && hd->MBRType==2 && (Partition==0 || hd->PartitionNumber==Partition) &&
+        !memcmp(hd->Signature,Want,sizeof(*Want));
+    }
+    if(node->Type==END_DEVICE_PATH_TYPE)return FALSE;
+    off+=len;
+  }
+  return FALSE;
+}
+/* Byte-identical device paths mean the SAME volume seen through two handles;
+   the volume we booted from must never be adopted as a payload candidate,
+   even when a profile leaves both GUID defaults at zero. */
+static BOOLEAN SameDevicePath(EFI_HANDLE A,EFI_HANDLE B) {
+  EFI_DEVICE_PATH_PROTOCOL *a=NULL,*b=NULL;
+  if(EFI_ERROR(Table->BootServices->HandleProtocol(A,&PathGuid,(VOID **)&a)) ||
+    EFI_ERROR(Table->BootServices->HandleProtocol(B,&PathGuid,(VOID **)&b)) || !a || !b)return FALSE;
+  UINTN off=0;
+  for(UINTN i=0;i<128 && off<=4092;i++) {
+    EFI_DEVICE_PATH_PROTOCOL *na=(VOID*)((UINT8*)a+off);
+    UINTN len=na->Length[0]+((UINTN)na->Length[1]<<8);
+    if(len<4 || len>4096-off)return FALSE;
+    if(memcmp(na,(UINT8*)b+off,len)!=0)return FALSE;
+    if(na->Type==END_DEVICE_PATH_TYPE)return na->SubType==END_ENTIRE_DEVICE_PATH_SUBTYPE;
+    off+=len;
+  }
+  return FALSE;
+}
+BOOLEAN GuLocalEsp(EFI_HANDLE Handle) {
+  static const EFI_GUID guid={KOH_WINDOWS_ESP_GUID};
+  return EspGuidPath(Handle,&guid,1);
+}
+static BOOLEAN GuPayloadEsp(EFI_HANDLE Handle) {
+  static const EFI_GUID guid={KOH_PAYLOAD_ESP_GUID};
+  /* Partition NUMBER is not pinned: diskpart renumbered the payload from the
+     planned part 5 to part 4 after the C: shrink (measured 2026-10-26, the
+     hardware run failed on the stale number). The GPT GUID is unique and
+     authoritative; 0 = accept any index. */
+  return EspGuidPath(Handle,&guid,0);
+}
 static EFI_STATUS Metadata(EFI_FILE_PROTOCOL *File,BOOLEAN Directory,UINTN Expected) {
   union {EFI_FILE_INFO info;UINT8 bytes[512];} data;UINTN n=sizeof(data);
   EFI_STATUS status=File->GetInfo(File,&InfoGuid,&n,&data);
@@ -72,11 +122,55 @@ EFI_STATUS GuIoOpen(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
   Table=St;Root=Parent=Run=Report=NULL;LogFault=FALSE;memset(GuAssets,0,sizeof(GuAssets));
   EFI_LOADED_IMAGE_PROTOCOL *loaded=NULL;EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs=NULL;
   EFI_STATUS status=Table->BootServices->HandleProtocol(Image,&LoadedGuid,(VOID **)&loaded);
-  if(EFI_ERROR(status) || !loaded || !UsbPath(loaded->DeviceHandle))return EFI_UNSUPPORTED;
+  if(EFI_ERROR(status) || !loaded || !(UsbPath(loaded->DeviceHandle) || GuLocalEsp(loaded->DeviceHandle) ||
+    GuPayloadEsp(loaded->DeviceHandle)))return EFI_UNSUPPORTED;
   status=Table->BootServices->HandleProtocol(loaded->DeviceHandle,&FsGuid,(VOID **)&fs);
   if(EFI_ERROR(status) || !fs)return EFI_UNSUPPORTED;
   status=fs->OpenVolume(fs,&Root);if(EFI_ERROR(status) || !Root)return EFI_DEVICE_ERROR;
+  BOOLEAN esp=GuLocalEsp(loaded->DeviceHandle);
   status=Root->Open(Root,&Parent,L"\\RTX4090-UNLOCK",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE,0);
+  if(status==EFI_NOT_FOUND && esp) {
+    /* ESP boot: the ESP only holds the loader; the payload volume keeps the
+       work tree. Mirror PreloadWindows: find it by its pinned GUID and accept
+       it only when EXACTLY one volume matches — an ambiguous GPT (two volumes
+       sharing the GUID, e.g. after a disk clone) must not be adopted. */
+    EFI_HANDLE *hs=NULL;UINTN n=0,matches=0,chosen=0;
+    status=Table->BootServices->LocateHandleBuffer(ByProtocol,&FsGuid,NULL,&n,&hs);
+    if(EFI_ERROR(status) || !hs || n>256) {if(hs)Table->BootServices->FreePool(hs);return EFI_NOT_FOUND;}
+    for(UINTN i=0;i<n;i++) {
+      if(SameDevicePath(hs[i],loaded->DeviceHandle) || !GuPayloadEsp(hs[i]))continue;
+      matches++;chosen=i;if(matches>1)break;
+    }
+    if(matches>1) {Table->BootServices->FreePool(hs);return EFI_NO_MAPPING;}
+    if(matches==1) {
+      EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *pfs=NULL;EFI_FILE_PROTOCOL *proot=NULL,*pparent=NULL;
+      status=Table->BootServices->HandleProtocol(hs[chosen],&FsGuid,(VOID **)&pfs);
+      if(EFI_ERROR(status) || !pfs)status=EFI_DEVICE_ERROR;
+      else status=pfs->OpenVolume(pfs,&proot);
+      if(EFI_ERROR(status) || !proot)status=EFI_DEVICE_ERROR;
+      if(!EFI_ERROR(status))status=proot->Open(proot,&pparent,L"\\RTX4090-UNLOCK",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE,0);
+      if(EFI_ERROR(status) || !pparent) {
+        /* abandon the candidate without ever switching roots; a failed Close
+           here is a leak on a volume we are dropping, not fatal to the run. */
+        if(pparent)pparent->Close(pparent);
+        if(proot && proot!=pparent)proot->Close(proot);
+        Table->BootServices->FreePool(hs);
+        return EFI_ERROR(status)?status:EFI_DEVICE_ERROR;
+      }
+      /* The load volume's root is no longer needed. Close it and CHECK the
+         result before adopting the payload root: Close invalidates the handle
+         even on error, so on failure we null Root and bail rather than leave
+         GuIoClose facing a half-switched pair. */
+      status=Root->Close(Root);
+      if(EFI_ERROR(status)) {
+        pparent->Close(pparent);proot->Close(proot);Root=NULL;
+        Table->BootServices->FreePool(hs);return EFI_DEVICE_ERROR;
+      }
+      Root=proot;Parent=pparent;status=EFI_SUCCESS;
+    }
+    Table->BootServices->FreePool(hs);
+    if(EFI_ERROR(status))return EFI_NOT_FOUND;
+  }
   if(EFI_ERROR(status) || !Parent)return EFI_NOT_FOUND;
   status=Metadata(Parent,TRUE,0);if(EFI_ERROR(status))return status;
   for(UINTN slot=0;slot<100;slot++) {
@@ -95,7 +189,7 @@ EFI_STATUS GuIoOpen(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
     if(status!=EFI_NOT_FOUND)return status;
     status=Run->Open(Run,&Report,L"REPORT.TXT",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE|EFI_FILE_MODE_CREATE,0);
     if(EFI_ERROR(status) || !Report)return EFI_DEVICE_ERROR;
-    GuLog("RTX 4090 AD102 / LOCAL USB UNLOCK TRIAL\nRUN%02u\nPress U once: one firmware transaction, verified selectors, FLR and Windows handoff. Selector mismatch stops the attempt. Local ROM/profile pinned; first hardware trial pending.\n",(unsigned)slot);
+    GuLog("RTX 4090 AD102 / LOCAL USB/ESP UNLOCK TRIAL\nRUN%02u\nPress U once: one firmware transaction, verified selectors, FLR and Windows handoff. Selector mismatch stops the attempt. Local ROM/profile pinned; first hardware trial pending.\n",(unsigned)slot);
     GuLogText("PIO readback is not an execution gate. This path does not independently verify TCM contents; FWSEC scratch/WPR results are required.\n");
     return GuLogReady()?EFI_SUCCESS:EFI_DEVICE_ERROR;
   }

@@ -6,8 +6,12 @@
 #include <string.h>
 #include <stdarg.h>
 #include <malloc.h>
+#ifndef _WIN32
+/* glibc: C11 aligned_alloc + free pair. On Windows, _aligned_malloc/_aligned_free
+ * are declared by malloc.h and form the matching pair; use them directly. */
 #define _aligned_malloc(n,a) aligned_alloc(a,n)
 #define _aligned_free(p) free(p)
+#endif
 #undef EPROTO
 #undef EBADMSG
 #undef EOVERFLOW
