@@ -6,6 +6,7 @@
 #include "sha256.h"
 #include "prom_profile.h"
 #include "ownership.h"
+#include "local_profile.h"
 #include "vendor/unlock_610.h"
 #include "vendor/gfw_eval.h"
 #include <Protocol/GraphicsOutput.h>
@@ -293,9 +294,9 @@ static EFI_STATUS Arm(VOID) {
   EFI_STATUS status=Table->ConIn->Reset(Table->ConIn,FALSE);if(EFI_ERROR(status))return status;
   GuLogText("READY: RTX 4090 AD102 24GB / LOCAL USB UNLOCK TRIAL / Windows preloaded.\n");
   if(PendingOwner.agent)GuLogText("U will release the RTX firmware driver, restore verified access settings if needed, then attempt WPR_CFG -> FBPA -> WPR -> FEAT in ONE SEC2 launch, then SS0/SS1 if required gates pass; log mismatches and recover.\n");
-  GuLogText("Press U once. One SEC2 fire containing four ordered PLM writes, then selectors/FLR/Windows on full success. The last frame may remain visible. Power OFF on STOP. Esc/30s cancels.\n");
+  GuLogText("Press U once to start now. Auto-attempt after 5s unless you press Esc to skip today. One SEC2 fire containing four ordered PLM writes, then selectors/FLR/Windows on full success. The last frame may remain visible. Power OFF on STOP.\n");
   if(!GuLogReady())return EFI_DEVICE_ERROR;
-  for(UINTN i=0;i<300;i++) {
+  for(UINTN i=0;i<KOH_AUTOCONFIRM_MS/100;i++) {
     EFI_INPUT_KEY key;status=Table->ConIn->ReadKeyStroke(Table->ConIn,&key);
     if(!EFI_ERROR(status)) {
       if(key.ScanCode==0x17 || key.UnicodeChar==27)return EFI_ABORTED;
@@ -303,7 +304,8 @@ static EFI_STATUS Arm(VOID) {
     } else if(status!=EFI_NOT_READY)return status;
     GuStall(100000);
   }
-  return EFI_TIMEOUT;
+  GuLogText("No key pressed: auto-attempt starting now (Esc was the skip option).\n");
+  return EFI_SUCCESS;
 }
 static VOID PausePreflightFailure(VOID) {
   if(GuScreenDetached || Gu.started || !Table->ConIn || !Table->ConIn->ReadKeyStroke)return;

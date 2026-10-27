@@ -189,7 +189,7 @@ EFI_STATUS GuIoOpen(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
     if(status!=EFI_NOT_FOUND)return status;
     status=Run->Open(Run,&Report,L"REPORT.TXT",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE|EFI_FILE_MODE_CREATE,0);
     if(EFI_ERROR(status) || !Report)return EFI_DEVICE_ERROR;
-    GuLog("RTX 4090 AD102 / LOCAL USB/ESP UNLOCK TRIAL\nRUN%02u\nPress U once: one firmware transaction, verified selectors, FLR and Windows handoff. Selector mismatch stops the attempt. Local ROM/profile pinned; first hardware trial pending.\n",(unsigned)slot);
+    GuLog("RTX 4090 AD102 / LOCAL USB/ESP UNLOCK TRIAL\nRUN%02u\nPress U once: one firmware transaction, verified selectors, FLR and Windows handoff. Auto-attempt after 5s unless Esc skips today. Selector mismatch stops the attempt. Local ROM/profile pinned.\n",(unsigned)slot);
     GuLogText("PIO readback is not an execution gate. This path does not independently verify TCM contents; FWSEC scratch/WPR results are required.\n");
     return GuLogReady()?EFI_SUCCESS:EFI_DEVICE_ERROR;
   }

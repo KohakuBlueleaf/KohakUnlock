@@ -299,7 +299,7 @@ static EFI_STATUS EFIAPI stale_read(EFI_PCI_IO_PROTOCOL *p,EFI_PCI_IO_PROTOCOL_W
 static EFI_STATUS EFIAPI disconnect(EFI_HANDLE h,EFI_HANDLE agent,EFI_HANDLE child) {
   CHECK(windows_loaded && GuScreenDetached);
   CHECK(h==H(3) && agent==H(8) && agent!=owner_binding.ImageHandle && !child);
-  CHECK(current_tpl==TPL_APPLICATION && key_sent && prompt && key_reset && !disconnect_calls && !exclusive);
+  CHECK(current_tpl==TPL_APPLICATION && (key_sent || app_mode==APP_TIMEOUT) && prompt && key_reset && !disconnect_calls && !exclusive);
   CHECK(GuAssets[4].firmware.data && !fake.mmio_writes && !fake.flrs && !fake.maps);
   CHECK(strstr(report_text,"release RTX firmware driver"));disconnect_calls++;
   if(app_mode==APP_HANDOFF_FAIL){config[4]|=4;return EFI_DEVICE_ERROR;}
@@ -631,10 +631,16 @@ int main(int argc,char **argv) {
     volatile EFI_STATUS result=EFI_ABORTED;
     int jumped=setjmp(escape_halt);if(!jumped)result=EfiMain(H(1),&st);
     BOOLEAN success=(mode==APP_HANDOFF || mode==APP_HANDOFF_CONFIG || mode==APP_HANDOFF_CHILD ||
-      mode==APP_ESP_BOOT || mode==APP_PAYLOAD_BOOT || mode==APP_ESP_NO_ASSETS || mode==APP_PAYLOAD_RENUM) &&
+      mode==APP_ESP_BOOT || mode==APP_PAYLOAD_BOOT || mode==APP_ESP_NO_ASSETS || mode==APP_PAYLOAD_RENUM ||
+      mode==APP_TIMEOUT) &&
       (!injected_case || ad_success(injected[i-basic_count]));
     if(success) {
       CHECK(windows_started && jumped==2 && !halted && fake.flrs==1 && connect_calls==1);
+      /* Arm polls ConIn once per 100 ms GuStall; the auto-attempt window is
+       * KOH_AUTOCONFIRM_MS, so the poll count pins the wall-clock window
+       * (the simulated suite has no real time: a wrong divisor here would
+       * pass every other assertion and hang the board for minutes). */
+      if(mode==APP_TIMEOUT)CHECK(key_calls==KOH_AUTOCONFIRM_MS/100);
       CHECK(fake.sec2_starts==1);
       CHECK(registers[SS0/4]==(fake.mode==AD_SS0_REJECT?0x31322012:0x88888888));
       CHECK(registers[SS1/4]==((fake.mode==AD_SS1_REJECT || fake.mode==SELECTOR_LOST)?7:8));
