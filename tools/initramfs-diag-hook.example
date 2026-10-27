@@ -1,0 +1,11 @@
+#!/bin/sh
+# Build hook for a private initramfs configuration, never the global hooks dir.
+set -eu
+case "${1:-}" in prereqs) exit 0;; esac
+: "${KOH_DIAG_MODULE:?Set the path to the reviewed diagnostic-only module}"
+: "${KOH_DIAG_HASH:?Set its verified SHA256}"
+. /usr/share/initramfs-tools/hook-functions
+copy_file module "$KOH_DIAG_MODULE" "/lib/modules/$version/extra/tu102_diag.ko"
+copy_exec /usr/bin/sha256sum /bin/sha256sum
+printf '%s  %s\n' "$KOH_DIAG_HASH" "/lib/modules/$version/extra/tu102_diag.ko" \
+    > "$DESTDIR/etc/kohak-diag-module.sha256"

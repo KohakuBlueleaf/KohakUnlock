@@ -1,0 +1,79 @@
+{
+  "profile": "nvidia-tu102-300a-1e07-12a4-22g-offline-candidate",
+  "status": "offline-model-candidate",
+  "execution_supported_generically": false,
+  "execution_allowed": false,
+  "hardware_unlock_validated": false,
+  "core": "TU102-300A",
+  "core_identity_source": "owner report; not inferred from PCI ID",
+  "vram_modded": true,
+  "stock_vram_gib": 11,
+  "tested_vram_gib": 22,
+  "memory_note": "Owner confirms physical 22 GiB modification, as on historical card; capacity observed. Offline candidate manifest; one-boot hardware result is in docs/RESULTS.md",
+  "pci_id": "10de:1e07",
+  "subsystem_id": "10de:12a4",
+  "vbios_version": "90.02.0B.00.0E",
+  "historical_target": "0000:01:00.0",
+  "framebuffer_bytes": 23622320128,
+  "snapshot_provenance": "pre-udev, driver unbound; cold versus warm unestablished",
+  "native_fwsec_asset": "native-fwsec.bin",
+  "native": {
+    "fwsec_descriptor_offset": "0x3f200",
+    "fwsec_image_offset": "0x3f23c",
+    "fwsec_descriptor_words": ["0x3c0201", "0x9a10", "0x9a10", "0", "0xdc", "0", "0x9600", "0", "0x300", "0x9300", "0x9600", "0", "0x410", "0x9600", "0x6618"],
+    "fwsec_bytes": 39440,
+    "fwsec_sha256": "1516eb686e3b4a379f9c5739720b4ebf938700c2b5bf65686006ccd3999e2227",
+    "mapper_offset": "0x380",
+    "command_offset": "0x3d0",
+    "command_size": 64
+  },
+  "registers": {
+    "0x0": "0x162000a1",
+    "0x100ce0": "0x2c9",
+    "0x625f04": "0x1",
+    "0x1fa824": "0x1ffffe00",
+    "0x1fa828": "0x0",
+    "0x409650": "0xffffff8f",
+    "0x409664": "0x500060",
+    "0x40966c": "0x5",
+    "0x110100": "0x10",
+    "0x840100": "0x10",
+    "0x118234": "0x3ff",
+    "0x409660": "0x2f3",
+    "0x409668": "0x400080"
+  },
+  "allowed_initial_selector_pairs": [["0x00500060", "0x5"], ["0x20500060", "0x5"]],
+  "selector_note": "Two exact observed tuples; second observed in five pre-driver normal-reboot samples and explicitly authorized by owner. Not decoded fuse fields or a bin classification. Pin the selected tuple across preparation.",
+  "inherited_model_assumptions": {
+    "frts_offset": "0x57fe00000",
+    "heap_bytes": 112197632,
+    "post_fwsec_wpr_low_high": ["0x57fe000", "0x57fee00"],
+    "post_booter_selectors": ["0x88888888", "0x8"],
+    "note": "Historical 22 GiB layout/protocol assertions; not observed after firmware execution on this card"
+  },
+  "remaining_reviews": [
+    "Cold/warm boot provenance and selector repeatability",
+    "Independent native loader/command ABI and pinned-input review",
+    "Target-kernel driver override exclusion",
+    "Independent actual-core model and retained-resource review",
+    "Target-specific executor integration and explicit authorization before hardware execution"
+  ],
+  "source_review": {
+    "repository": "https://github.com/NVIDIA/open-gpu-kernel-modules",
+    "revision": "c8e699821c23e4335bf23330a54a23d15cfb95e9",
+    "release": "580.178.04",
+    "capacity_dispatch": "TU102 -> kmemsysReadUsableFbSize_GP102; register 0x100ce0",
+    "mmu_lock_dispatch": "TU102 -> invalid/not-applicable stub, not GA100 MMU-lock registers",
+    "fwsec_abi": "V2 native descriptor; mapper V3 init_cmd at +44; FRTS command 0x15",
+    "scope": "Static source review; no inference about SKU bin fields or hardware firmware acceptance"
+  },
+  "cmp_source": "https://github.com/xrip/cmp50hx-unlock",
+  "cmp_commit": "df2fe11b370bb52cc314576d0f2f5ae47ce908f8",
+  "assets": [
+    {"name": "native-fwsec.bin", "bytes": 39440, "sha256": "1516eb686e3b4a379f9c5739720b4ebf938700c2b5bf65686006ccd3999e2227", "origin": "owner-authorized native PROM capture; tools/rom_analyze.py"},
+    {"name": "bl_gsp_tu102.bin", "bytes": 768, "sha256": "f21f1cfbb8fffa8067685314367fc4c50f3f84dd99eda7c19db4292d9269b9d9", "origin": "pinned CMP efi-unlock/blobs; compatibility only modeled"},
+    {"name": "booter_ucode_prod.bin", "bytes": 59136, "sha256": "e0f0fc93da097b5b68e5af3adb58b2235ed1fad5fce0b23592d3895af44cb743", "origin": "pinned CMP efi-unlock/blobs; compatibility only modeled"},
+    {"name": "v67_payload.bin", "bytes": 64000, "sha256": "de7288bcfb80c2d4b259a59e823c926ba0a9adcab594219cc6802c94257ce271", "origin": "pinned CMP efi-unlock/blobs; compatibility only modeled"},
+    {"name": "gsp_rm_boot_dbg.bin", "bytes": 131072, "sha256": "fa43239bcee7b97ca62f007cc68487560a39e19f74f3dde7486db3f98df8e471", "origin": "pinned CMP efi-unlock/blobs; only first 0x6000 used, compatibility only modeled"}
+  ]
+}

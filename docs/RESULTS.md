@@ -17,6 +17,55 @@ Short instruction tests, target 0.3 s each. Same physical GPU selected by verifi
 
 Approximately +85% on the targeted FP32-accumulating path; controls essentially flat. Native BF16/TF32 remained unsupported.
 
+## Turing TU102-300A, kernel 7.0.0-30
+
+Second, separate one-shot result: 22 GiB RTX 2080 Ti TU102-300A, PCI `10de:1e07`,
+subsystem `10de:12a4`, VBIOS `90.02.0B.00.0E`, physically VRAM-modified to
+22 GiB. Kernel `7.0.0-30-generic`, NVIDIA 595.91.07. The initial selector pair
+was `0x20500060 / 5`; the transaction reached stage 11 with `unlocked=1`,
+`quiescent=1` and safe handoff, then NVIDIA bound the device normally. The
+second exact pair was owner-authorized after five read-only samples; bit 29 is
+not decoded.
+
+Same-method short test: `2048³` cuBLAS GEMM, 3 warmups, 20 timed iterations,
+structured ±1 inputs, complete output checked.
+
+| Mode | Locked | Unlocked, first post-boot run | Change |
+|---|---:|---:|---:|
+| FP32→FP32 | 10.799 TFLOPS | 10.798 TFLOPS | flat |
+| FP16→FP32 | **40.777 TFLOPS** | **71.514 TFLOPS** | **+75.4%** |
+| FP16→FP16 | 76.089 TFLOPS | 76.098 TFLOPS | flat |
+| INT8→INT32 NN | 37.139 TOPS | 37.028 TOPS | flat |
+
+Sustained runs used `8192³`, 10 warmups, batches of 32 GEMMs, at least 10 GPU
+seconds per mode; transfers and validation are excluded.
+
+| Mode | Throughput | GPU time | Final output |
+|---|---:|---:|---|
+| FP16→FP32 | 107.057 TFLOP/s | 10.188155 s | 67,108,864 passed |
+| FP16→FP16 | 112.972 TFLOP/s | 10.277614 s | 67,108,864 passed |
+| INT8→INT32 NN | 44.301 TOPS | 10.324857 s | 67,108,864 passed |
+| INT8→INT32 TN | 169.935 TOPS | 10.145256 s | 67,108,864 passed |
+
+The locked baseline has no 8192/10-second run, so 107.057/40.777,
+112.972/76.089 and 169.935/37.139 must not be reported as matched unlock
+ratios. The FP16→FP16 control was already near 76 TFLOPS while locked, and the
+sustained value is close to NVIDIA's 107.6–113.8 TFLOPS FP16-accumulate
+specification for this SKU. The clearest same-method recovery is therefore the
+FP16-input, FP32-accumulate short test. No locked 8192 INT8 Tensor baseline or
+locked telemetered run exists.
+
+The INT8 NN first kernel executed no IMMA instructions; the TN kernel executed
+536,870,912. TN/NN is a labeled layout change inside the unlocked boot, not an
+unlock speedup. A later short rerun after sustained load also raised FP32, pure
+FP16 and NN INT8 by roughly 36–37%, showing a warmup/state confound; those
+changes are not attributed to the unlock.
+
+Limits: one successful boot, one card, structured inputs, no random-data or
+all-22-GiB verification, no long endurance run, no cross-boot repeatability and
+no end-to-end LLM, image-generation or Real-ESRGAN measurement. Clocks were not
+locked and power/thermal history was not normalized.
+
 ## Original MAMF engine, two-card comparison
 
 FP16, PyTorch 2.8.0+cu129, 30 s initial warmup, 50 warmup + 100 measured iterations per shape. Original transposed-B layout, cache/destination-reset behavior, timing function retained; terminal UI changed only. No claim of strict same-card baseline. Silicon/cooling/clock differences between cards remain possible.
@@ -56,6 +105,6 @@ Both saved reports have benchmark script SHA256 `64b4ed9fed4c50da812c8c3529aa9cc
 
 ## What is NOT established
 
-Turing numerical correctness has not been independently certified by the local public-repo measurement record; the recorded runs here are throughput tests and healthy-driver checks. Upstream's own correctness results apply to its hardware/profile, not automatically this port. A local validation script was drafted during development but its successful execution was not recorded; do not turn that into a pass claim. Independent numerical, memory-integrity and sustained thermal/endurance testing remains required.
+The recorded Turing runs include complete final-output checks for structured ±1 inputs, healthy-driver checks and sustained GEMM throughput. They are not independent numerical certification: random inputs, per-iteration checking, all-memory testing and long-duration thermal/endurance verification remain required. Upstream's own correctness results apply to its hardware/profile, not automatically to either port.
 
-No deliberate post-launch hardware failure recovery test, long-duration stability certification, game/LLM speedup measurement, or successful second-card TU102 unlock is claimed. Host simulation, matching hashes and successful boot are valuable but narrower evidence.
+No deliberate post-launch hardware failure recovery test, long-duration stability certification, application-level (LLM/image-generation/Real-ESRGAN) speedup measurement, or successful second physical copy of the `1e07:12a4` profile is claimed. Host simulation, matching hashes and successful boots are valuable but narrower evidence.

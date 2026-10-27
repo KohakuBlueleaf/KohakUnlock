@@ -24,7 +24,7 @@
 
 #define TX_GSP 0x110000u
 #define TX_SEC 0x840000u
-#define TX_FWSEC_SIZE 0x9c20u
+#include "tu102_profile.h"
 #define TX_BOOTER_SIZE 0xe700u
 #define TX_SIGNATURE_SIZE 0xfa00u
 #define TX_BOOT_SIZE 0x6000u
@@ -120,18 +120,21 @@ static int tx_delay(Tx *t,uint32_t us) {
 }
 static int tx_barrier(Tx *t) { return (t->barrier)(t->opaque) ? TX_IO:TX_OK; }
 
-/* Exact native descriptor was independently parsed from Linux and UEFI ROMs. */
-static const uint32_t tx_desc[15]={0x3c0201,0x9c20,0x9c20,0,0xe0,0,0x9800,0,
-                                 0x400,0x9400,0x9800,0,0x420,0x9800,0x6638};
+/* Exact per-profile descriptor pinned to saved native ROM evidence. */
+static const uint32_t tx_desc[15]=TX_NATIVE_DESC_WORDS;
 static int tx_prepare(Tx *t,const uint8_t *booter,const uint8_t *signature,const uint8_t *boot) {
     if(!t->address || !t->pool || !t->native_fwsec || !t->generic_bl || !booter || !signature || !boot ||
        t->device_address<0x100000000ULL || (t->device_address&4095) ||
        t->device_address>0x10000000000ULL-TX_POOL_SIZE) return TX_GUARD;
-    const uint8_t *d=t->native_fwsec+0x9800;
+    const uint8_t *d=t->native_fwsec+TX_NATIVE_DMEM_OFF;
     /* This fixed-card profile rejects a different mapper, not merely a size. */
-    if(tx_u32(d+0xe0)!=0x02080401 || tx_u32(d+0xe4)!=4 || tx_u32(d+0xe8)!=0x390 ||
-       tx_u32(d+0x390)!=0x50414d44 || tx_u32(d+0x394)!=0x00400003 ||
-       tx_u32(d+0x398)!=0x3e0 || tx_u32(d+0x39c)!=0x40) return TX_GUARD;
+    if(tx_u32(d+TX_NATIVE_INTERFACE_OFF)!=0x02080401 ||
+       tx_u32(d+TX_NATIVE_INTERFACE_OFF+4)!=4 ||
+       tx_u32(d+TX_NATIVE_INTERFACE_OFF+8)!=TX_NATIVE_MAPPER_OFF ||
+       tx_u32(d+TX_NATIVE_MAPPER_OFF)!=0x50414d44 ||
+       tx_u32(d+TX_NATIVE_MAPPER_OFF+4)!=0x00400003 ||
+       tx_u32(d+TX_NATIVE_MAPPER_OFF+8)!=TX_NATIVE_COMMAND_OFF ||
+       tx_u32(d+TX_NATIVE_MAPPER_OFF+12)!=0x40) return TX_GUARD;
     tx_zero(t->pool,TX_POOL_SIZE);
     tx_copy(t->pool+TX_FWSEC_OFF,t->native_fwsec,TX_FWSEC_SIZE);
     tx_copy(t->pool+TX_BOOTER_OFF,booter,TX_BOOTER_SIZE);
@@ -140,10 +143,10 @@ static int tx_prepare(Tx *t,const uint8_t *booter,const uint8_t *signature,const
     static const uint8_t sig[16]={0x32,0x60,0x43,0x67,0x98,0x89,0x7b,0x06,
                                   0xe8,0x5f,0x1a,0xa8,0x71,0x43,0x5d,0xcb};
     tx_copy(t->pool+TX_BOOTER_OFF+0x8700,sig,16);
-    uint8_t *pd=t->pool+TX_FWSEC_OFF+0x9800;
+    uint8_t *pd=t->pool+TX_FWSEC_OFF+TX_NATIVE_DMEM_OFF;
     const uint32_t cmd[12]={1,24,0,0,0,2,1,20,(uint32_t)(TX_FRTS>>12),0x100,2,0};
-    for(unsigned i=0;i<12;i++) tx_put32(pd+0x3e0+4*i,cmd[i]);
-    tx_put32(pd+0x3bc,0x15);
+    for(unsigned i=0;i<12;i++) tx_put32(pd+TX_NATIVE_COMMAND_OFF+4*i,cmd[i]);
+    tx_put32(pd+TX_NATIVE_MAPPER_OFF+44,0x15);
     /* Leadtek TU102 heap: 8 MiB base + ceil(22*96 KiB) + 96 MiB clients.
      * 107 MiB, within the 256 MiB pre-scrubbed top region for this image.
      * Dummy image/Booter combination is pinned to the upstream experiment;
@@ -230,13 +233,17 @@ static int tx_guard_note(Tx *t,uint32_t off,uint32_t want,uint32_t actual,uint32
     return t->guard_note && t->guard_note(t->opaque,off,want,actual,mask)?TX_LOG:TX_OK;
 }
 static int tx_observed_pair(uint32_t ss0,uint32_t ss1) {
-    /* Leadtek 42:00.0 pre-driver diagnostic observed exactly 0/0. */
-    return ss0==0 && ss1==0;
+    /* Exact observed tuples per profile; never mask unknown fields. */
+#ifdef TX_PROFILE_NVIDIA_1E07_12A4
+    return (ss0==TX_INITIAL_SS0 || ss0==TX_INITIAL_SS0_ALT) && ss1==TX_INITIAL_SS1;
+#else
+    return ss0==TX_INITIAL_SS0 && ss1==TX_INITIAL_SS1;
+#endif
 }
 static int tx_guards(Tx *t) {
     static const uint32_t off[]={0,0x409650,0x409664,0x40966c,0x625f04,
         0x1fa824,0x1fa828,0x118234,0x409660,0x409668,0x110100,0x840100};
-    static const uint32_t want[]={0x162000a1,0xffffff8f,0,0,0x1,
+    static const uint32_t want[]={0x162000a1,0xffffff8f,TX_INITIAL_SS0,TX_INITIAL_SS1,0x1,
         0x1ffffe00,0,0x3ff,0x2f3,0x00400080,0x10,0x10};
     uint32_t ss0=0,ss1=0,v=0;
     if(!t->native_fwsec || t->mutated) return TX_GUARD;
@@ -251,20 +258,26 @@ static int tx_guards(Tx *t) {
         if(i==2) ss0=v;
         if(i==3) {
             ss1=v;
-            if(!tx_observed_pair(ss0,ss1)) return TX_GUARD;
+            if(!tx_observed_pair(ss0,ss1)) {
+                /* Both reads succeeded. Preserve the full rejected pair,
+                 * including the word that still matches, before refusing. */
+                int first=tx_guard_note(t,0x409664,TX_INITIAL_SS0,ss0,0xffffffffu);
+                int second=tx_guard_note(t,0x40966c,TX_INITIAL_SS1,ss1,0xffffffffu);
+                return first || second ? TX_LOG : TX_GUARD;
+            }
             if(t->baseline_valid && (ss0!=t->initial_ss0 || ss1!=t->initial_ss1))
                 return TX_GUARD;
         }
     }
     for(unsigned i=0;i<15;i++) {
-        uint32_t at=0x33ed98+4*i;
+        uint32_t at=0x300000+TX_NATIVE_DESC_OFF+4*i;
         v=0;int r=t->read(t->opaque,at,&v);
         TX_TRY(tx_guard_note(t,at,tx_desc[i],v,0xffffffffu));
         if(r) return TX_IO;
         if(v!=tx_desc[i]) return TX_GUARD;
     }
     for(unsigned i=0;i<TX_FWSEC_SIZE;i+=4) {
-        uint32_t at=0x33edd4+i,expected=tx_u32(t->native_fwsec+i);
+        uint32_t at=0x300000+TX_NATIVE_IMAGE_OFF+i,expected=tx_u32(t->native_fwsec+i);
         v=0;int r=t->read(t->opaque,at,&v);
         if(r || v!=expected) {
             TX_TRY(tx_guard_note(t,at,expected,v,0xffffffffu));
@@ -285,13 +298,13 @@ static int tx_guards(Tx *t) {
     }
     TX_TRY(tx_read(t,0x118234,&v)); if((v&0x3ff)!=0x3ff) return TX_GUARD;
     for(unsigned i=0;i<15;i++) {
-        if(t->read(t->opaque,0x300000+0x3ed98+4*i,&v)) return TX_IO;
+        if(t->read(t->opaque,0x300000+TX_NATIVE_DESC_OFF+4*i,&v)) return TX_IO;
         if(v!=tx_desc[i]) return TX_GUARD;
     }
     for(unsigned i=0;i<TX_FWSEC_SIZE;i+=4) {
         /* ROM data may legitimately be FFFFFFFF or resemble a BADF code.
          * Compare raw bytes; only control-register reads use that sentinel. */
-        if(t->read(t->opaque,0x300000+0x3edd4+i,&v)) return TX_IO;
+        if(t->read(t->opaque,0x300000+TX_NATIVE_IMAGE_OFF+i,&v)) return TX_IO;
         if(v!=tx_u32(t->native_fwsec+i)) return TX_GUARD;
     }
     return TX_OK;
@@ -308,13 +321,13 @@ static int tx_run(Tx *t) {
     TX_TRY(tx_write(t,TX_GSP+0x610,(v&~0x1fu)|0x15));
     uint8_t desc[0x54]={0}; uint64_t fw=t->address(t->opaque,TX_FWSEC_OFF);
     tx_put32(desc+0x20,4); tx_put64(desc+0x24,fw);
-    tx_put32(desc+0x2c,0); tx_put32(desc+0x30,0x400);
-    tx_put32(desc+0x34,0x400); tx_put32(desc+0x38,0x9400);
-    tx_put64(desc+0x40,fw+0x9800); tx_put32(desc+0x48,0x420);
+    tx_put32(desc+0x2c,0); tx_put32(desc+0x30,tx_desc[8]);
+    tx_put32(desc+0x34,tx_desc[8]); tx_put32(desc+0x38,tx_desc[9]);
+    tx_put64(desc+0x40,fw+tx_desc[10]); tx_put32(desc+0x48,tx_desc[12]);
     TX_TRY(tx_dmem(t,TX_GSP,desc,sizeof(desc)));
     TX_TRY(tx_read(t,TX_GSP+0x108,&v));
     uint32_t blocks=v&0x1ff;
-    if(blocks<0x9a || blocks>0x100) return TX_VERIFY;
+    if(blocks<TX_MIN_IMEM_BLOCKS || blocks>0x100) return TX_VERIFY;
     uint32_t dest=(blocks-2)<<8;
     TX_TRY(tx_imem(t,TX_GSP,dest,t->generic_bl,0x200,0xfd00,0));
     TX_TRY(tx_write(t,TX_GSP+0x180,dest));

@@ -1,0 +1,107 @@
+#!/bin/sh
+# Exact local target; install only into a separately reviewed private initramfs.
+case "${1:-}" in prereqs) exit 0;; esac
+case " $(cat /proc/cmdline) " in
+    *" kohak.trial=nvidia-1e07-12a4-once "*) ;;
+    *) exit 0;;
+esac
+umask 077
+out=/run/kohak-tu102-trial
+volume=/run/kohak-log-volume
+diskout=
+stop()
+{
+    echo "STOP: $*" > /dev/console
+    echo 'Logs: /run/kohak-tu102-trial; persistent copy under /mnt/kohak-unlock-logs after recovery.' > /dev/console
+    echo 'Do not continue boot, unload, clear override or bind NVIDIA. Full power off/on to normal Ubuntu.' > /dev/console
+    dmesg > "$out/kernel.log" 2>/dev/null || :
+    [ ! -f "$out/events.log" ] || cat "$out/events.log" > /dev/console
+    echo 'stopped-before-udev' > "$out/status"
+    sync -f "$out" 2>/dev/null || :
+    # Returning from this inspection shell never resumes the boot.
+    while :; do /bin/sh </dev/console >/dev/console 2>&1; done
+}
+mkdir -m 0700 "$out" || stop 'trial directory exists; no retry'
+. /etc/kohak-trial-log.conf || stop 'log configuration missing'
+modprobe nvme || stop 'log storage driver unavailable'
+mkdir -m 0700 "$volume" || stop 'unexpected existing log mountpoint'
+count=0
+logdev=
+while [ "$count" -lt 40 ]; do
+    logdev=$(blkid -U "$KOH_LOG_UUID" 2>/dev/null) && [ -b "$logdev" ] && break
+    count=$((count+1))
+    sleep 0.25
+done
+[ -n "$logdev" ] && [ -b "$logdev" ] || stop 'log volume not found'
+mount -t vfat -o rw,sync,umask=0077,nodev,nosuid,noexec "$logdev" "$volume" || stop 'log volume mount failed'
+diskout="$volume/KohakUnlockLogs/$KOH_TRIAL_ID"
+# A per-image marker refuses any subsequent attempt with this image.
+mkdir -m 0700 "$diskout" || stop 'this trial image was already used; no automatic retry'
+rmdir "$out" || stop 'RAM log path unexpectedly populated'
+ln -s "$diskout" "$out" || stop 'log link failed'
+echo 'prepared-before-module; no firmware attempted yet' > "$out/status"
+sync -f "$out" || stop 'persistent log flush failed'
+exec 3>"$out/gate.log"
+: > "$out/events.log"
+uname -r > "$out/kernel.txt"
+cat /proc/cmdline > "$out/cmdline.txt"
+cat /proc/uptime > "$out/start-uptime.txt"
+cp /etc/kohak-trial-manifest.json "$out/manifest.json" || stop 'manifest missing'
+echo 'Kohak TU102: trial before udev; persistent stage journal ready' > /dev/kmsg
+echo 'Kohak TU102: starting one authorized firmware attempt; logs in /run/kohak-tu102-trial' > /dev/console
+case " $(cat /proc/cmdline) " in
+    *" tu102_execute.execute=1 "*) ;; *) stop 'execute=1 missing';;
+esac
+case " $(cat /proc/cmdline) " in
+    *" tu102_execute.target=0000:01:00.0 "*) ;; *) stop 'wrong/missing target';;
+esac
+[ "$(uname -r)" = '7.0.0-30-generic' ] || stop 'unexpected kernel'
+# No udev daemon or GPU driver may precede this gate. A separate ORDER check
+# during image verification proves the declared prerequisite is actually used.
+for proc in /proc/[0-9]*/comm; do
+    name=$(cat "$proc" 2>/dev/null) || continue
+    case "$name" in *udevd*) stop 'udev already running';; esac
+done
+for name in nvidia nvidia_drm nvidia_modeset nvidia_uvm nouveau nova_core nova_drm vfio_pci; do
+    [ ! -d "/sys/module/$name" ] || stop "GPU driver $name already loaded"
+done
+dev=/sys/bus/pci/devices/0000:01:00.0
+[ -d "$dev" ] && [ ! -L "$dev/driver" ] || stop 'target absent or already bound'
+for pair in vendor:0x10de device:0x1e07 subsystem_vendor:0x10de subsystem_device:0x12a4; do
+    key=${pair%%:*}; expected=${pair#*:}
+    actual=$(cat "$dev/$key") || stop 'identity unreadable'
+    [ "$actual" = "$expected" ] || stop "identity mismatch: $key"
+    echo "$key=$actual" >&3
+done
+echo 'driver_before_trial=unbound' >&3
+sha256sum -c /etc/kohak-trial.sha256 >&3 2>&1 || stop 'module/input hash mismatch'
+. /scripts/kohak-trial-handoff || stop 'handoff policy missing'
+# Firmware dependency and crypto modules have no GPU binding aliases. The
+# executor itself is loaded by exact path, after all gate checks, without retry.
+modprobe -a crypto_hash >&3 2>&1 || stop 'crypto dependency unavailable'
+dmesg -w > "$out/kernel-live.log" 2>&1 &
+reader=$!
+loaded=0
+insmod "/lib/modules/$(uname -r)/extra/tu102_execute.ko" \
+    target=0000:01:00.0 execute=1 pre_udev=1 >&3 2>&1 || loaded=$?
+result=$(cat /sys/module/tu102_execute/parameters/result 2>/dev/null)
+safe=$(cat /sys/module/tu102_execute/parameters/handoff_safe 2>/dev/null)
+echo "load_status=$loaded result=$result handoff_safe=$safe" >&3
+dmesg > "$out/kernel.log"
+cat /proc/uptime > "$out/end-uptime.txt"
+kill "$reader" 2>/dev/null || :
+wait "$reader" 2>/dev/null || :
+kohak_trial_handoff "$loaded" "$result" "$safe" || stop 'experiment refused, failed, or handoff unverified'
+echo 'transaction-complete-handoff-safe; performance/correctness still unvalidated' > "$out/status"
+sync -f "$out" || stop 'final log flush failed'
+# Keep an in-memory copy for this boot, and release the temporary mount before
+# normal userspace mounts the same volume at /boot/efi.
+mkdir -m 0700 /run/kohak-trial-ram || stop 'RAM mirror directory exists'
+cp -a "$diskout/." /run/kohak-trial-ram/ || stop 'RAM mirror failed'
+rm "$out" || stop 'log link removal failed'
+mv /run/kohak-trial-ram "$out" || stop 'RAM mirror move failed'
+exec 3>&-
+umount "$volume" || stop 'temporary log mount still busy'
+echo 'Kohak TU102: transaction completed; udev may now start. Persistent logs saved.' > /dev/console
+echo 'Kohak TU102: trial-end; udev may now proceed' > /dev/kmsg
+exit 0

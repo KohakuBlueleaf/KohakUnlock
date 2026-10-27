@@ -46,6 +46,32 @@ This does not install/load anything. Compiler and kernel must match. Host-only t
 
 The executor uses 512 separate 64 KiB coherent blocks, a CPU shadow and per-block DMA pointers. It must not assume a contiguous 32 MiB allocation. External files are loaded through request_firmware and authenticated against pinned SHA256 before mutation.
 
+### Exact `10de:1e07 / 10de:12a4` profile on kernel 7.0.0-30
+
+The NVIDIA candidate is a separate profile, not a change to the historical
+Leadtek identity. It requires the explicit target trial build and keeps
+`ENABLE_EXPERIMENT=1` as the public build gate:
+
+```sh
+make test-private-nvidia ASSETS="$PWD/local/profile-model-inputs"
+make module ENABLE_EXPERIMENT=1 DIAG_PROFILE=nvidia-1e07-12a4 \
+  EXEC_PROFILE=nvidia-1e07-12a4-trial
+```
+
+The profile pins `0000:01:00.0`, `10de:1e07 / 10de:12a4`, native FWSEC size
+39440 and its SHA256, the `0x9600` DMEM layout, and only the two exact initial
+selector pairs `0x00500060/5` or `0x20500060/5`. The selected pair is pinned
+across preparation; switching pairs still refuses. Bit 29 is not decoded.
+All identity, native-image, capacity, post-Booter `0x88888888/8`, quiescence
+and safe-handoff checks remain. The candidate build succeeded once on this
+profile. Treat that as one boot, not repeatability.
+
+For the candidate gate, use the reviewed kernel-7 templates
+`tools/initramfs-trial-{hook,gate}.example` and verify the exact module and five
+input hashes, init-top order, target identity and kernel before rebooting. The
+log path is private and machine-specific; never copy another host's filesystem
+UUID. The public examples remain one-shot and do not install a default entry.
+
 ## 5. One-shot initramfs integration (manual, machine-specific)
 
 There is deliberately no `make install`.

@@ -26,6 +26,15 @@ The shipped code still pins BDF 42:00.0, Leadtek subsystem IDs, exact native fir
 
 The read-only diagnostic also has a narrow target allowlist (42:00.0 or 43:00.0), refuses driver-bound devices and will not turn on PCI memory decoding. MMIO reads can still have platform-specific risks; review register definitions before expanding them.
 
+An explicitly selected NVIDIA 1e07/12a4 trial profile is now available separately
+from that historical default. It pins 01:00.0, the measured native FWSEC and exact
+selector pairs, requires ENABLE_EXPERIMENT=1 and a controlled pre-udev gate, and
+has one successful boot with sustained GEMM checks. See PROFILE-NVIDIA-22G.md.
+This does not establish repeatability or long-term stability. Generic/offline
+profile checks never grant permission to execute it. The trial's phase journal
+is fsynced to a private log directory on an existing FAT volume; early mounting
+must not bypass normal root-filesystem checks. Failure stops before udev.
+
 ## Security settings
 
 Do not copy the original host's unrelated iomem/ACS/IOMMU flags as prerequisites. They are not established requirements. Do not disable IOMMU or Secure Boot casually. An unsigned module needs appropriate local signing or an explicitly accepted Secure Boot configuration. Changing boot/security settings may trigger disk-encryption recovery; retain recovery keys first.

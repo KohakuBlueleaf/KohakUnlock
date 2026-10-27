@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+case "${1:-}" in prereqs) exit 0;; esac
+: "${KOH_SELECTOR_MODULE:?Reviewed diagnostic module required}"
+: "${KOH_SELECTOR_MANIFEST:?Private manifest required}"
+: "${KOH_SELECTOR_LOG_CONFIG:?Private log configuration required}"
+. /usr/share/initramfs-tools/hook-functions
+copy_file module "$KOH_SELECTOR_MODULE" "/lib/modules/$version/extra/tu102_diag.ko"
+copy_exec /usr/bin/sha256sum /bin/sha256sum
+copy_exec /usr/bin/dmesg /bin/dmesg
+copy_exec /usr/bin/sync /bin/sync
+copy_exec /usr/sbin/blkid /bin/blkid
+for module in nvme nls_cp437 nls_utf8 nvidia nvidia_modeset nvidia_drm nvidia_uvm; do
+    manual_add_modules "$module"
+done
+copy_file config "$KOH_SELECTOR_MANIFEST" /etc/kohak-selector-manifest.json
+copy_file config "$KOH_SELECTOR_LOG_CONFIG" /etc/kohak-selector-log.conf
+sha256sum "$DESTDIR/lib/modules/$version/extra/tu102_diag.ko" | \
+    sed "s|$DESTDIR||" > "$DESTDIR/etc/kohak-selector.sha256"

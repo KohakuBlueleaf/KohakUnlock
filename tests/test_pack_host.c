@@ -5,7 +5,7 @@
 int main(void)
 {
     u64 mask=0xffffffff;
-    struct pci_dev p={.dev={&mask,0xffffffff},.vendor=0x10de,.device=0x1e04,.subsystem_vendor=0x107d,.subsystem_device=0x1e04};
+    struct pci_dev p=profile_device(&mask);
     struct tu102_dma s={0};
     struct tu102_pack_result out;
     assert(dma_test_main()==0);

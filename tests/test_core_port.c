@@ -20,6 +20,8 @@ typedef struct {
 #ifdef TX_EXPERIMENT_V4
     uint32_t feature,readout,gfw;
     unsigned guard_notes,fail_guard_note;
+    uint32_t selector_actual[2],selector_expected[2];
+    unsigned selector_seen;
     int bad_descriptor;
 #endif
 } Model;
@@ -28,15 +30,32 @@ static uint8_t signature[TX_SIGNATURE_SIZE],boot[TX_BOOT_CONTAINER_SIZE];
 static Model model;
 static Tx tx;
 static unsigned cases;
+static uint64_t model_address(void *ctx,uint32_t off);
+
+/* Independently transcribed native layout, rather than emulating whatever
+ * offsets the implementation happens to request. No firmware is executed. */
+#ifdef TX_PROFILE_NVIDIA_1E07_12A4
+enum { PROM_DESC=0x33f200, PROM_IMAGE=0x33f23c, NATIVE_DMEM=0x9600,
+       MAPPER_PATCH=0x99ac, COMMAND_PATCH=0x99d0, MIN_BLOCKS=0x98 };
+static const uint32_t observed_desc[15]={0x3c0201,0x9a10,0x9a10,0,0xdc,0,0x9600,0,
+    0x300,0x9300,0x9600,0,0x410,0x9600,0x6618};
+static const uint32_t observed_pair[2]={0x500060,5};
+#else
+enum { PROM_DESC=0x33ed98, PROM_IMAGE=0x33edd4, NATIVE_DMEM=0x9800,
+       MAPPER_PATCH=0x9bbc, COMMAND_PATCH=0x9be0, MIN_BLOCKS=0x9a };
+static const uint32_t observed_desc[15]={0x3c0201,0x9c20,0x9c20,0,0xe0,0,0x9800,0,
+    0x400,0x9400,0x9800,0,0x420,0x9800,0x6638};
+static const uint32_t observed_pair[2]={0,0};
+#endif
 
 static int model_read(void *ctx,uint32_t off,uint32_t *v) {
     Model *m=ctx;
     if(++m->reads==m->fail_read) return 1;
-    if(off>=0x33edd4 && off<0x33edd4+TX_FWSEC_SIZE) {
-        *v=tx_u32(m->native+off-0x33edd4)^(m->rom_bad?1:0); return 0;
+    if(off>=PROM_IMAGE && off<PROM_IMAGE+TX_FWSEC_SIZE) {
+        *v=tx_u32(m->native+off-PROM_IMAGE)^(m->rom_bad?1:0); return 0;
     }
-    if(off>=0x33ed98 && off<0x33edd4) {
-        *v=tx_desc[(off-0x33ed98)/4];
+    if(off>=PROM_DESC && off<PROM_IMAGE) {
+        *v=observed_desc[(off-PROM_DESC)/4];
 #ifdef TX_EXPERIMENT_V4
         if(m->bad_descriptor)*v^=1;
 #endif
@@ -92,10 +111,16 @@ static int model_write(void *ctx,uint32_t off,uint32_t v) {
         if(!b) {
             m->fw_starts++;
             assert(m->dmem[0][0x20/4]==4);
-            assert(m->dmem[0][0x30/4]==0x400 && m->dmem[0][0x38/4]==0x9400);
-            assert(m->dmem[0][0x48/4]==0x420);
-            assert(tx_u32(m->tx->pool+0x9bbc)==0x15);
-            assert(tx_u32(m->tx->pool+0x9c00)==0x57fe00);
+            assert(tx_u64((uint8_t *)m->dmem[0]+0x24)==model_address(m,TX_FWSEC_OFF));
+            assert(!m->dmem[0][0x2c/4] && !m->dmem[0][0x3c/4]);
+            assert(m->dmem[0][0x30/4]==observed_desc[8] &&
+                   m->dmem[0][0x34/4]==observed_desc[8] &&
+                   m->dmem[0][0x38/4]==observed_desc[9]);
+            assert(m->dmem[0][0x48/4]==observed_desc[12]);
+            assert(tx_u64((uint8_t *)m->dmem[0]+0x40)==
+                   model_address(m,TX_FWSEC_OFF)+NATIVE_DMEM);
+            assert(tx_u32(m->tx->pool+MAPPER_PATCH)==0x15);
+            assert(tx_u32(m->tx->pool+COMMAND_PATCH+0x20)==0x57fe00);
             m->regs[0][0x100/4]=m->mode==3?0:0x10;
             m->lo=0x57fe000; m->hi=0x57fee00;
             if(m->mode==1) m->scratch=0x10000;
@@ -120,7 +145,12 @@ static int model_delay(void *ctx,uint32_t us) {
 static int model_barrier(void *ctx) { return ((Model *)ctx)->barrier_fail; }
 #ifdef TX_EXPERIMENT_V4
 static int model_guard_note(void *ctx,uint32_t off,uint32_t want,uint32_t actual,uint32_t mask) {
-    Model *m=ctx;(void)off;(void)want;(void)actual;(void)mask;
+    Model *m=ctx;
+    if((off==0x409664 || off==0x40966c) && mask==0xffffffffu) {
+        unsigned word=off==0x40966c;
+        m->selector_actual[word]=actual;m->selector_expected[word]=want;
+        m->selector_seen|=1u<<word;
+    }
     return ++m->guard_notes==m->fail_guard_note;
 }
 #endif
@@ -148,7 +178,8 @@ static void setup(void) {
     tx.read=model_read;tx.write=model_write;tx.delay=model_delay;
     tx.barrier=model_barrier;tx.event=model_event;tx.native_fwsec=native;tx.generic_bl=generic;
     model.tx=&tx; model.native=native; model.boot0=0x162000a1; model.workspace=1;
-    model.ss0=0;model.ss1=0;model.plm=0xffffff8f;model.lo=0x1ffffe00;
+    model.ss0=observed_pair[0];model.ss1=observed_pair[1];
+    model.plm=0xffffff8f;model.lo=0x1ffffe00;
     model.regs[0][0x108/4]=0x100; model.regs[1][0x108/4]=0x100;
 #ifdef TX_EXPERIMENT_V4
     model.feature=0x2f3;model.readout=0x00400080;model.gfw=0x3ff;
@@ -167,9 +198,14 @@ static void metadata_test(void) {
     assert(tx_u64(m+19*8)==TX_FRTS && tx_u64(m+24*8)==0x100000);
     assert(m[241]==1 && !m[240] && !m[242]);
     assert(tx_u64(m+31*8)==0);
-    for(size_t i=0;i<0x9800;i++) assert(tx.pool[i]==native[i]);
-    for(size_t i=0x9800;i<TX_FWSEC_SIZE;i++)
-        if(tx.pool[i]!=native[i]) assert((i>=0x9bbc&&i<0x9bc0)||(i>=0x9be0&&i<0x9c10));
+    /* TU102 FWSEC FRTS ABI from the pinned NVIDIA source, including padding. */
+    const uint32_t expected_cmd[12]={1,24,0,0,0,2,1,20,0x57fe00,0x100,2,0};
+    for(unsigned i=0;i<12;i++)
+        assert(tx_u32(tx.pool+COMMAND_PATCH+4*i)==expected_cmd[i]);
+    for(size_t i=0;i<NATIVE_DMEM;i++) assert(tx.pool[i]==native[i]);
+    for(size_t i=NATIVE_DMEM;i<TX_FWSEC_SIZE;i++)
+        if(tx.pool[i]!=native[i]) assert((i>=MAPPER_PATCH&&i<MAPPER_PATCH+4)||
+                                       (i>=COMMAND_PATCH&&i<COMMAND_PATCH+48));
     assert(!memcmp(tx.pool+TX_SIGNATURE_OFF,signature,TX_SIGNATURE_SIZE));
     uint64_t root=tx_u64(tx.pool+TX_RADIX_OFF), l2=tx_u64(tx.pool+TX_RADIX_OFF+0x1000);
     assert(root==model_address(&model,TX_RADIX_OFF+0x1000));
@@ -185,15 +221,39 @@ static void asset(const char *dir,const char *name,uint8_t *data,size_t size) {
     assert(n>0 && (size_t)n<sizeof(path));
     load(path,data,size);
 }
+static void synthetic_inputs(void) {
+    /* Firmware-free fixtures for exercising both compiled profiles in CI.
+     * All remaining bytes are zero; these are never executable packages. */
+    uint8_t *d=native+NATIVE_DMEM;
+    tx_put32(d+observed_desc[4],0x02080401);
+    tx_put32(d+observed_desc[4]+4,4);
+    tx_put32(d+observed_desc[4]+8,MAPPER_PATCH-NATIVE_DMEM-44);
+    uint8_t *mapper=native+MAPPER_PATCH-44;
+    tx_put32(mapper,0x50414d44);tx_put32(mapper+4,0x00400003);
+    tx_put32(mapper+8,COMMAND_PATCH-NATIVE_DMEM);tx_put32(mapper+12,64);
+}
 int main(int argc,char **argv) {
     if(argc!=2) { fprintf(stderr,"usage: %s VERIFIED_ASSET_DIRECTORY\n",argv[0]); return 2; }
-    asset(argv[1],"leadtek-fwsec.bin",native,sizeof(native));
-    asset(argv[1],"bl_gsp_tu102.bin",generic,sizeof(generic));
-    asset(argv[1],"booter_ucode_prod.bin",booter,sizeof(booter));
-    asset(argv[1],"v67_payload.bin",signature,sizeof(signature));
-    asset(argv[1],"gsp_rm_boot_dbg.bin",boot,sizeof(boot));
+    int synthetic=!strcmp(argv[1],"--synthetic");
+    if(synthetic) synthetic_inputs();
+    else {
+        asset(argv[1],TX_NATIVE_NAME,native,sizeof(native));
+        asset(argv[1],"bl_gsp_tu102.bin",generic,sizeof(generic));
+        asset(argv[1],"booter_ucode_prod.bin",booter,sizeof(booter));
+        asset(argv[1],"v67_payload.bin",signature,sizeof(signature));
+        asset(argv[1],"gsp_rm_boot_dbg.bin",boot,sizeof(boot));
+    }
     tx.pool=malloc(TX_POOL_SIZE); assert(tx.pool);
     metadata_test();
+    const unsigned native_checks[]={NATIVE_DMEM+observed_desc[4],
+        NATIVE_DMEM+observed_desc[4]+4,NATIVE_DMEM+observed_desc[4]+8,
+        MAPPER_PATCH-44,MAPPER_PATCH-40,MAPPER_PATCH-36,MAPPER_PATCH-32};
+    for(unsigned i=0;i<sizeof(native_checks)/sizeof(native_checks[0]);i++) {
+        setup();unsigned off=native_checks[i];native[off]^=1;
+        tx.pool[0]=0xa5;
+        assert(tx_prepare(&tx,booter,signature,boot)==TX_GUARD);
+        assert(tx.pool[0]==0xa5 && !model.writes);native[off]^=1;cases++;
+    }
     setup();assert(tx_run(&tx)==TX_OK && tx.unlocked && tx.quiescent);
     assert(model.fw_starts==1 && model.booter_starts==1); cases++;
     unsigned write_total=model.writes;
@@ -215,10 +275,14 @@ int main(int argc,char **argv) {
         setup();model.mode=mode;int r=tx_run(&tx);assert(r && tx.mutated && !tx.quiescent);
         assert(model.booter_starts==(mode>=5?1u:0u));cases++;
     }
-    for(unsigned blocks=0x98; blocks<0x9a; blocks++) {
+    for(unsigned blocks=MIN_BLOCKS-2; blocks<MIN_BLOCKS; blocks++) {
         setup();model.regs[0][0x108/4]=blocks;
         assert(tx_run(&tx)==TX_VERIFY && !model.fw_starts);cases++;
     }
+    setup();model.regs[0][0x108/4]=MIN_BLOCKS;
+    assert(tx_run(&tx)==TX_OK && tx.quiescent);cases++;
+    setup();model.regs[0][0x108/4]=0x101;
+    assert(tx_run(&tx)==TX_VERIFY && !model.fw_starts);cases++;
     setup();model.reset_stuck=1;assert(tx_run(&tx)==TX_TIMEOUT && !model.fw_starts);cases++;
     setup();model.barrier_fail=1;assert(tx_run(&tx)==TX_IO && !model.fw_starts);cases++;
     for(unsigned stage=1;stage<=TX_STAGE_DONE;stage++) {
@@ -246,13 +310,37 @@ int main(int argc,char **argv) {
     setup();assert(tx_write(&tx,0x409664,0x88888888)==TX_GUARD && !model.writes);cases++;
     setup();assert(tx_write(&tx,0x8403c4,0xff)==TX_GUARD && !model.writes);cases++;
 #ifdef TX_EXPERIMENT_V4
-    const uint32_t pairs[][2]={{0,0}};
-    for(unsigned i=0;i<1;i++) {
+    const uint32_t pairs[][2]={
+        {observed_pair[0],observed_pair[1]},
+#ifdef TX_PROFILE_NVIDIA_1E07_12A4
+        {0x20500060,5},
+#endif
+    };
+    const unsigned pair_count=sizeof(pairs)/sizeof(pairs[0]);
+    for(unsigned word=0;word<2;word++)for(unsigned fail=0;fail<3;fail++) {
+        setup();
+        if(word)model.ss1^=1;else model.ss0^=1;
+        if(fail)model.fail_guard_note=4+fail;
+        assert(tx_guards(&tx)==(fail?TX_LOG:TX_GUARD));
+        assert(model.selector_seen==3 && !model.writes && !tx.mutated && !tx.baseline_valid);
+        assert(model.selector_actual[0]==model.ss0 && model.selector_actual[1]==model.ss1);
+        assert(model.selector_expected[0]==observed_pair[0] && model.selector_expected[1]==observed_pair[1]);
+        cases++;
+    }
+#ifdef TX_PROFILE_NVIDIA_1E07_12A4
+    setup();model.ss0=0;model.ss1=0;
+#else
+    setup();model.ss0=0x20500060;model.ss1=5;
+    assert(tx_run(&tx)==TX_GUARD && !model.writes);cases++;
+    setup();model.ss0=0x500060;model.ss1=5;
+#endif
+    assert(tx_run(&tx)==TX_GUARD && !model.writes);cases++;
+    for(unsigned i=0;i<pair_count;i++) {
         setup();model.ss0=pairs[i][0];model.ss1=pairs[i][1];
         assert(tx_guards(&tx)==TX_OK && tx.baseline_valid && !model.writes);
         assert(tx.initial_ss0==model.ss0 && tx.initial_ss1==model.ss1);
         assert(tx_run(&tx)==TX_OK && tx.unlocked && tx.quiescent);cases++;
-        for(unsigned j=0;j<1;j++)if(i!=j) {
+        for(unsigned j=0;j<pair_count;j++)if(i!=j) {
             setup();model.ss0=pairs[i][0];model.ss1=pairs[i][1];assert(tx_guards(&tx)==TX_OK);
             model.ss0=pairs[j][0];model.ss1=pairs[j][1];
             assert(tx_run(&tx)==TX_GUARD && !model.writes);cases++;
@@ -260,10 +348,12 @@ int main(int argc,char **argv) {
     }
     /* Every one-bit alteration of each observed pair must either be another
      * exact observed tuple or refuse. No Cartesian-product/wildcard acceptance. */
-    for(unsigned p=0;p<1;p++)for(unsigned word=0;word<2;word++)for(unsigned bit=0;bit<32;bit++) {
+    for(unsigned p=0;p<pair_count;p++)for(unsigned word=0;word<2;word++)for(unsigned bit=0;bit<32;bit++) {
         setup();model.ss0=pairs[p][0];model.ss1=pairs[p][1];
         if(word)model.ss1^=1u<<bit;else model.ss0^=1u<<bit;
-        int known=tx_observed_pair(model.ss0,model.ss1);
+        int known=0;
+        for(unsigned q=0;q<pair_count;q++)
+            if(model.ss0==pairs[q][0] && model.ss1==pairs[q][1])known=1;
         assert(tx_guards(&tx)==(known?TX_OK:TX_GUARD) && !model.writes);cases++;
     }
     setup();model.ss0=0x02221154;model.ss1=6;
@@ -291,6 +381,7 @@ int main(int argc,char **argv) {
     setup();tx.native_fwsec=NULL;assert(tx_guards(&tx)==TX_GUARD && !model.reads);cases++;
 #endif
     free(tx.pool);
-    printf("PASS: %u offline loader cases; exact blobs, metadata/radix bounds, alias CPU start, guards, timeouts, stage and I/O failures. No hardware access.\n",cases);
+    printf("PASS: %u offline loader cases (%s); metadata/radix bounds, alias CPU start, guards, timeouts, stage and I/O failures. No hardware access.\n",
+           cases,synthetic?"synthetic firmware-free fixtures":"private file inputs; hash precheck required");
     return 0;
 }

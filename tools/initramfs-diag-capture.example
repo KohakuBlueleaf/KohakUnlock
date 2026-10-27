@@ -1,0 +1,59 @@
+#!/bin/sh
+# Explicit-target, read-only candidate; run before udev in a separate image.
+case "${1:-}" in prereqs) exit 0;; esac
+case " $(cat /proc/cmdline) " in
+    *" kohak.diag=read-only-1e07-12a4 "*) ;;
+    *) exit 0;;
+esac
+umask 077
+out=/run/kohak-tu102-capture
+mkdir -m 0700 "$out" || exit 0
+exec 3>"$out/capture.log"
+echo 'Kohak TU102: starting authorized read-only capture before udev.' > /dev/console
+echo 'Kohak TU102: capture-start before udev' > /dev/kmsg
+echo 'target=0000:01:00.0' >&3
+echo 'power_on_vs_warm=not-established; record manually' >&3
+uname -r > "$out/kernel.txt"
+cat /proc/uptime > "$out/start-uptime.txt"
+mounted_debugfs=n
+capture()
+{
+    dev=/sys/bus/pci/devices/0000:01:00.0
+    [ -d "$dev" ] || { echo 'REFUSED: target missing' >&3; return 1; }
+    [ ! -L "$dev/driver" ] || { echo 'REFUSED: target already bound' >&3; return 1; }
+    for item in vendor:0x10de device:0x1e07 subsystem_vendor:0x10de subsystem_device:0x12a4; do
+        name=${item%%:*}
+        expected=${item#*:}
+        actual=$(cat "$dev/$name") || return 1
+        [ "$actual" = "$expected" ] || { echo "REFUSED: $name=$actual" >&3; return 1; }
+        echo "$name=$actual" >&3
+    done
+    echo 'driver_before_capture=unbound' >&3
+    sha256sum -c /etc/kohak-diag-module.sha256 >&3 2>&1 || return 1
+    if ! grep -q ' /sys/kernel/debug debugfs ' /proc/mounts; then
+        mount -t debugfs -o ro,mode=0700 debugfs /sys/kernel/debug || return 1
+        mounted_debugfs=y
+    fi
+    # This module checks identity, binding and decoding again while device-locked.
+    modprobe tu102_diag target=0000:01:00.0 >&3 2>&1 || return 1
+    cp /sys/kernel/debug/tu102_diag/prom.bin "$out/prom.bin" || return 1
+    bytes=$(wc -c < "$out/prom.bin") || return 1
+    echo "prom_bytes=$bytes" >&3
+    [ "$bytes" -eq 1048576 ] || return 1
+    sha256sum "$out/prom.bin" > "$out/prom.sha256" || return 1
+    echo 'result=raw-capture-complete; offline validation still required' >&3
+}
+if capture; then
+    echo 'raw-capture-complete' > "$out/status"
+    echo 'Kohak TU102: capture saved in /run/kohak-tu102-capture; continuing normal boot.' > /dev/console
+else
+    echo 'capture-failed-or-refused' > "$out/status"
+    echo 'Kohak TU102: capture failed/refused; see /run/kohak-tu102-capture/capture.log.' > /dev/console
+fi
+dmesg | grep -E 'tu102_diag|Kohak TU102' > "$out/kernel-diag.log"
+cat /proc/uptime > "$out/end-uptime.txt"
+if [ "$mounted_debugfs" = y ]; then
+    umount /sys/kernel/debug || echo 'debugfs unmount failed' >&3
+fi
+echo 'Kohak TU102: capture-end; udev may now proceed' > /dev/kmsg
+exit 0

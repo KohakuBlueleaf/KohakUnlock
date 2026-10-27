@@ -1,10 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #ifndef TU102_DMA_HOST_TEST
 #include <linux/errno.h>
+#include <linux/module.h>
 #include <linux/string.h>
 #include <linux/slab.h>
 #endif
 #include "tu102_dma.h"
+#include "tu102_identity.h"
+
+#ifndef TU102_DMA_HOST_TEST
+MODULE_INFO(kohak_dma_profile, TX_IDENTITY_PROFILE);
+#endif
 
 /* Caller holds device lock; state is private and zero-initialized. */
 int tu102_dma_prepare(struct tu102_dma *state, struct pci_dev *pdev)
@@ -12,8 +18,8 @@ int tu102_dma_prepare(struct tu102_dma *state, struct pci_dev *pdev)
     int ret;
     if (!state || !pdev || state->pdev || pdev->driver || !pdev->dev.dma_mask)
         return -EINVAL;
-    if (pdev->vendor != 0x10de || pdev->device != 0x1e04 ||
-        pdev->subsystem_vendor != 0x107d || pdev->subsystem_device != 0x1e04)
+    if (pdev->vendor != 0x10de || pdev->device != TX_DEVICE_ID ||
+        pdev->subsystem_vendor != TX_SUBVENDOR_ID || pdev->subsystem_device != TX_SUBDEVICE_ID)
         return -ENODEV;
     state->pdev = pci_dev_get(pdev);
     state->old_streaming = *pdev->dev.dma_mask;

@@ -1,0 +1,32 @@
+#!/bin/sh
+set -eu
+case "${1:-}" in prereqs) exit 0;; esac
+: "${KOH_TRIAL_MODULE:?Exact reviewed executor module required}"
+: "${KOH_TRIAL_ASSETS:?Private verified input directory required}"
+: "${KOH_TRIAL_METADATA:?Private build manifest required}"
+: "${KOH_TRIAL_LOG_CONFIG:?Private log volume configuration required}"
+. /usr/share/initramfs-tools/hook-functions
+copy_file module "$KOH_TRIAL_MODULE" "/lib/modules/$version/extra/tu102_execute.ko"
+copy_exec /usr/bin/sha256sum /bin/sha256sum
+copy_exec /usr/bin/dmesg /bin/dmesg
+copy_exec /usr/bin/sync /bin/sync
+copy_exec /usr/sbin/blkid /bin/blkid
+manual_add_modules crypto_hash
+# Package the currently matched DKMS stack; inclusion does not load it. Udev
+# runs only after the transaction has positively authorized handoff.
+manual_add_modules nvidia
+manual_add_modules nvidia_modeset
+manual_add_modules nvidia_drm
+manual_add_modules nvidia_uvm
+manual_add_modules nvme
+manual_add_modules nls_cp437
+manual_add_modules nls_utf8
+for name in native-fwsec.bin bl_gsp_tu102.bin booter_ucode_prod.bin v67_payload.bin gsp_rm_boot_dbg.bin; do
+    copy_file firmware "$KOH_TRIAL_ASSETS/$name" "/lib/firmware/tu102-lab/$name"
+done
+copy_file config "$KOH_TRIAL_METADATA" /etc/kohak-trial-manifest.json
+copy_file config "$KOH_TRIAL_LOG_CONFIG" /etc/kohak-trial-log.conf
+# Absolute image paths, checked again before the module can execute.
+sha256sum "$DESTDIR/lib/modules/$version/extra/tu102_execute.ko" \
+    "$DESTDIR"/lib/firmware/tu102-lab/*.bin | \
+    sed "s|$DESTDIR||" > "$DESTDIR/etc/kohak-trial.sha256"

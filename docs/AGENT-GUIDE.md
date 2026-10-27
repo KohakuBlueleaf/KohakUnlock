@@ -21,6 +21,7 @@ still uses that original single-target profile.
 
 - kernel/tu102_core_port.h: adaptation of upstream injected-I/O transaction core. Native Leadtek descriptor and layout pinned; reset/load/start/verify/cleanup sequence.
 - kernel/tu102_execute_main.c: exact target, firmware hashes, device lock/driver_override, BAR ownership, CPU shadow, coherent buffers, bounded callbacks, lifetime/handoff.
+- kernel/tu102_identity.h: shared exact PCI/subsystem identity for executor and DMA helper; propagate target flags to both translation units and check both module profile tags before packaging.
 - kernel/tu102_dma.c: bounded coherent chunks, masks and restoration; blocks retained if mutation is not quiescent.
 - kernel/tu102_diag.c: read-only unbound-device snapshot. No firmware execution. BDF allowlist remains deliberately narrow.
 - kernel/tu102_pack.c: preparation-stage metadata/radix implementation and verification; tested during development, NOT linked into the final executor. Keep its distinction from the execution core explicit.
@@ -55,7 +56,13 @@ The Linux wrapper holds the device lock, rejects existing bindings/overrides, in
 
 ## Failure-path evidence versus proof
 
-Host suite covers 445 protocol cases and 104 sequencing-policy combinations; policy is not wired as the executor. DMA tests cover 7 failure/lifetime scenarios. Diagnostic/preparation boots verified kernel allocation, identity, real noncontiguous addresses and cleanup after injected pre-execution abort. Actual unlock succeeded once on one card. Post-launch failure recovery has not been deliberately induced on hardware. Document this limitation prominently.
+Host suite covers 462 historical and 528 candidate protocol cases and 104 sequencing-policy combinations; policy is not wired as the executor. The real DMA helper is tested under both exact identity profiles, each with 7 failure/lifetime scenarios and 5 identity rejection cases before side effects. A mixed-profile compiled module must be rejected before packaging. Diagnostic/preparation boots verified kernel allocation, identity, real noncontiguous addresses and cleanup after injected pre-execution abort on the historical board. Actual unlock succeeded once on that board. The first NVIDIA-profile attempt passed initial guards but stopped at a stale DMA identity check before allocation or firmware launch; the second refused the initial selector pair before DMA. Neither is unlock evidence. Rejected-pair tests verify both raw words are reported, including a matching word and callback failure, before any write. Post-launch failure recovery has not been deliberately induced on hardware. Document this limitation prominently.
+
+The candidate accepts exactly two observed initial pairs, 0x00500060/5 and
+0x20500060/5. The selected pair is pinned across preparation, so a transition
+between them still refuses. Tests independently enumerate both pairs and one-bit
+mutations. This is a bounded allowlist, not a bit-29 decode or repeatability
+claim.
 
 ## Benchmark mistakes to avoid
 
@@ -72,3 +79,5 @@ Never upload private ROMs/PROMs, firmware/payload binaries, decrypted images, so
 ## Next work
 
 Independent repeatability/correctness/endurance testing, a second TU102 card only after its own pre-driver profile validation, stronger hardware quiescence evidence, generic profile generation with signed-off gates, and a nonrecursive persistent boot design. Do not enable persistence by merely choosing the experimental entry as default.
+
+
