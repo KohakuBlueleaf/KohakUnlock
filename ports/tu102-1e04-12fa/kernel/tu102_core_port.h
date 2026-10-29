@@ -230,10 +230,10 @@ static int tx_guard_note(Tx *t,uint32_t off,uint32_t want,uint32_t actual,uint32
     return t->guard_note && t->guard_note(t->opaque,off,want,actual,mask)?TX_LOG:TX_OK;
 }
 static int tx_observed_pair(uint32_t ss0,uint32_t ss1) {
-    /* TU102 1e04/12fa locked-selector family (varies per boot; all pre-unlock,
-     * distinct from the 0x88888888/0x8 full-rate target). Observed cold pairs. */
-    return (ss0==0 && ss1==0) || (ss0==0x4000 && ss1==0) ||
-           (ss0==0x4000000 && ss1==0x4);
+    /* Cold SS0/SS1 vary per boot on this board (seen 0x0/0x20/0x4000/0x4000000,
+     * SS1 0 or 4). Accept any pre-unlock state; refuse only the already-unlocked
+     * 0x88888888/0x8 target. The other guards establish the cold pre-boot state. */
+    return !(ss0==0x88888888u && ss1==0x8u);
 }
 static int tx_guards(Tx *t) {
     static const uint32_t off[]={0,0x409650,0x409664,0x40966c,0x625f04,

@@ -38,12 +38,16 @@ WPR2 `0x1ffffe00/0`, FEAT PLM `0xffffff8f`, both engine CPUCTLs halted (`0x10`).
 
 ### Selector baseline varies per cold boot
 
-`SS0/SS1` (`0x409664` / `0x40966c`) were **not** stable across cold boots on this
-board — observed `0x0/0x0`, `0x4000/0x0`, and `0x4000000/0x4`, all clearly
-pre-unlock (the full-rate target is `0x88888888/0x8`). `tx_observed_pair` here
-accepts that locked family; an unseen pair fails safe (no mutation, card stays
-locked and still binds NVIDIA). Worth noting for the profile-driven design — a
-single pinned pair is not sufficient for this board.
+`SS0/SS1` (`0x409664` / `0x40966c`) are **not** stable across cold boots on this
+board — observed `0x0/0x0`, `0x20/0x4`, `0x4000/0x0`, and `0x4000000/0x4`, all
+clearly pre-unlock (the full-rate target is `0x88888888/0x8`). Enumerating exact
+pairs is a losing game here (a fresh value shows up and that card silently stays
+locked for the boot), so `tx_observed_pair` accepts **any** pre-unlock state and
+refuses only the already-unlocked `0x88888888/0x8` target. The other guards
+(BOOT0, capacity, workspace, WPR2, PLM, both CPUCTLs halted, full PROM descriptor
++ FWSEC byte-match) already establish the cold pre-boot state, so this stays
+safe. Worth noting for the profile-driven design — a pinned selector pair is not
+viable for this board.
 
 ## Source deltas vs `kernel/`
 
