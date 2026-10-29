@@ -96,14 +96,17 @@ Same physical card, one session, FP16→FP32 accumulate vs an FP16→FP16 contro
 | condition | FP16→FP32acc | FP16→FP16 control |
 | --- | --- | --- |
 | locked, 200 W | 60.4 | 100.2 |
+| locked, 280 W | 61.3 | 112.1 |
 | unlocked, 200 W | 94.8 | 102.1 |
-| unlocked, 280 W (max) | 105.9 | 113.8 |
+| unlocked, 280 W (max) | 106.5 | 114.5 |
 
 The control is flat across lock state; the FP16→FP32 cap is removed (from ~½ the
-control to ~parity). `GemmEx` includes layout/memory overhead, so these sit below
-an instruction-peak (`mmapeak`) number. Clocks not locked; 280 W is the card's
-own max power limit (not persisted). Both cards on the host unlock and pass a
-two-GPU workload.
+control to ~parity). The cap is architectural, not power/thermal: locked stays
+~61 TFLOPS at both 200 W and 280 W while the control scales with power. Same-power
+A/B at 280 W is 61.3 → 106.5 (+74%). `GemmEx` includes layout/memory overhead, so
+these sit below an instruction-peak (`mmapeak`) number. Clocks not locked; 280 W
+is the card's own max power limit (not persisted). Both cards on the host unlock
+and pass a two-GPU workload.
 
 ## Not established
 

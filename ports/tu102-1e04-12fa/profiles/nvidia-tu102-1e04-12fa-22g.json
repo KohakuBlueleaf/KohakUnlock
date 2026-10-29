@@ -29,10 +29,11 @@
   ],
   "results_8192_cublas": {
     "locked_200w_fp16_fp32": 60.4,
+    "locked_280w_fp16_fp32": 61.3,
     "unlocked_200w_fp16_fp32": 94.8,
-    "unlocked_280w_fp16_fp32": 105.9,
-    "unlocked_280w_fp16_fp16_control": 113.8,
+    "unlocked_280w_fp16_fp32": 106.5,
+    "unlocked_280w_fp16_fp16_control": 114.5,
     "unit": "TFLOPS",
-    "note": "same physical card locked vs unlocked within one session; control (FP16->FP16) stays flat, FP16->FP32acc cap removed"
+    "note": "same physical card locked vs unlocked within one session; control (FP16->FP16) stays flat and scales with power; the FP16->FP32acc cap is architectural (locked ~61 at both 200W and 280W), removed by the unlock"
   }
 }
