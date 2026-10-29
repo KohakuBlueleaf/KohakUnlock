@@ -1,0 +1,38 @@
+{
+  "profile": "nvidia-tu102-1e04-12fa-22g-experimental",
+  "execution_supported_generically": false,
+  "vram_modded": true,
+  "stock_vram_gib": 11,
+  "tested_vram_gib": 22,
+  "memory_note": "Physical VRAM modification predates the compute unlock; software adds no memory",
+  "pci_id": "10de:1e04",
+  "subsystem_id": "10de:12fa",
+  "vbios_version": "90.02.17.00.DB",
+  "framebuffer_bytes": 23622320128,
+  "tested_kernel": "7.0.0-38-generic",
+  "tested_nvidia_driver": "610.57.04",
+  "cmp_source": "https://github.com/xrip/cmp50hx-unlock",
+  "cmp_commit": "df2fe11b370bb52cc314576d0f2f5ae47ce908f8",
+  "fwsec_descriptor_words": [3932673, 39440, 39440, 0, 220, 0, 38400, 0, 768, 37632, 38400, 0, 1040, 38400, 26136],
+  "fwsec_descriptor_note": "magic 0x3c0201 (same family as Leadtek); interface@0xdc, DMEM@0x9600, sec-IMEM 0x300/0x9300, DMEM size 0x410, mapper@0x380, command@0x3d0",
+  "prom_descriptor_offset": "0x33f024 (BAR0 aperture 0x300000 + 0x3f024)",
+  "prom_fwsec_image_offset": "0x33f060",
+  "selector_locked_family": [["0x0", "0x0"], ["0x4000", "0x0"], ["0x4000000", "0x4"]],
+  "selector_locked_note": "SS0/SS1 at 0x409664/0x40966c vary across cold boots within this family; all pre-unlock, distinct from the full-rate target",
+  "selector_unlocked": ["0x88888888", "0x8"],
+  "assets": [
+    {"name": "tu102-1e04-fwsec.bin", "bytes": 39440, "sha256": "9e93d134ca2954e7d9ad69ace01707eeb7e5c8adf01b5b6e0d4b0575cab10bae", "origin": "own native PROM (BAR0+0x300000, 1 MiB); tools/rom_analyze.py --extract"},
+    {"name": "bl_gsp_tu102.bin", "bytes": 768, "sha256": "f21f1cfbb8fffa8067685314367fc4c50f3f84dd99eda7c19db4292d9269b9d9", "origin": "pinned CMP efi-unlock/blobs"},
+    {"name": "booter_ucode_prod.bin", "bytes": 59136, "sha256": "e0f0fc93da097b5b68e5af3adb58b2235ed1fad5fce0b23592d3895af44cb743", "origin": "pinned CMP efi-unlock/blobs"},
+    {"name": "v67_payload.bin", "bytes": 64000, "sha256": "de7288bcfb80c2d4b259a59e823c926ba0a9adcab594219cc6802c94257ce271", "origin": "pinned CMP efi-unlock/blobs"},
+    {"name": "gsp_rm_boot_dbg.bin", "bytes": 131072, "sha256": "fa43239bcee7b97ca62f007cc68487560a39e19f74f3dde7486db3f98df8e471", "origin": "pinned CMP efi-unlock/blobs; only first 0x6000 used"}
+  ],
+  "results_8192_cublas": {
+    "locked_200w_fp16_fp32": 60.4,
+    "unlocked_200w_fp16_fp32": 94.8,
+    "unlocked_280w_fp16_fp32": 105.9,
+    "unlocked_280w_fp16_fp16_control": 113.8,
+    "unit": "TFLOPS",
+    "note": "same physical card locked vs unlocked within one session; control (FP16->FP16) stays flat, FP16->FP32acc cap removed"
+  }
+}
