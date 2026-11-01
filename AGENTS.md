@@ -2,7 +2,7 @@
 
 Read docs/SAFETY.md and docs/AGENT-GUIDE.md before editing. Default tasks are offline source/tests only. Do not load a module, access BARs, change bindings, reboot, modify boot settings or run firmware without explicit authorization and verified recovery access.
 
-- `make test`: CPU-only, firmware-free tests.
+- `make test`: CPU-only, firmware-free tests (includes the TU104 synthetic-profile suite).
 - `make test-private ASSETS=...`: CPU-only protocol model with private verified inputs.
 - `make module`: compile only, execution disabled by default.
 - Windows/Ada: read docs/ADA-AGENT-GUIDE.md for ROM extraction, firmware analysis, profile adaptation, UEFI ownership, build/tests and signing. Source: windows/ad102; default build is inert.

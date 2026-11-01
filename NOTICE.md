@@ -21,6 +21,8 @@ Firmware input reference: xrip/cmp50hx-unlock `df2fe11b370bb52cc314576d0f2f5ae47
 
 The board-specific UEFI wrapper was replaced with Linux early-boot PCI/MMIO/DMA handling. Native firmware descriptors, mapper offsets and hashes were adapted to the measured Leadtek 22 GiB profile. Framebuffer layout changed from 11 to 22 GiB. Per-64-KiB device addresses and a CPU shadow replace contiguous physical DMA assumptions. Linux cleanup, driver override and fail-closed boot gating were added. Tests cover the adapted inputs, noncontiguous addressing, IMEM bounds and failure cleanup.
 
+The TU104 RTX 2060 port (kernel/tu104_*, tools/profile_gen.py) re-parameterizes the same core from a generated per-card profile; it shares the upstream lineage above and performs no hardware run. `kernel/override_compat.h` adapts the Linux driver_override API (private since 6.15); driver semantics unchanged.
+
 Original source: https://github.com/haohervchb/Turing-unlock/tree/a188b24a392414f29f931ea886329227cfbc2f98 . No upstream endorsement implied.
 Loader/layout interfaces were compared with NVIDIA/open-gpu-kernel-modules 580.178.04 (`c8e699821c23e4335bf23330a54a23d15cfb95e9`). Driver licenses vary; its repository is not bundled.
 
