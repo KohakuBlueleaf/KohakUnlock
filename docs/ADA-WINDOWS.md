@@ -57,7 +57,7 @@ numerical correctness, endurance and sleep/resume are not established.
 ## MAMF Finder application GEMM
 
 Unlocked RTX4090 FP16 MAMF Finder: **243.9 TFLOPS best median** at
-4096x5120x2048; best peak250.4 TFLOPS, best mean224.2 TFLOPS.
+4096x5120x2048; best peak 250.4 TFLOPS, best mean 224.2 TFLOPS.
 Original measurement loop:50 warmup +100 measured iterations,125 shapes,
 M/N/K each2048..6144 step1024. WSL2, PyTorch2.14.1+cu130.
 | Before | After (best median) |
