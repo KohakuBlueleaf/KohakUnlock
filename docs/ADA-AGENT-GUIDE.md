@@ -19,7 +19,7 @@ protectoff, reset or driver unbinding is part of this step. WSL is for offline t
 not ordinary direct access to the physical PCI ROM. Hash and preserve original bytes.
 
 Our 2,048,000-byte dump begins NVGI, not 55aa. Expansion views at 0x9400 and
-0xe9400 were identical over 0xd6c00 bytes. Legacy+UEFI PCI image length was0x24a00.
+0xe9400 were identical over 0xd6c00 bytes. Legacy+UEFI PCI image length was 0x24a00.
 Use bounds-checked PCIR/NPDS/NPDE chains and BIT parsing; BIT pointers are relative
 to the normalized ROM with extension adjustment. Finding a signature alone is not
 an executable image parser.
