@@ -4,7 +4,7 @@ GPL-2.0-only application derived from TOTORONG/AD103_win_unlocker revision
 51df9c17ec89eb8486df52cc9079dde4bd1f9974. Component licenses are retained in
 source/LICENSES and source/deps/edk2/License.txt; upstream notices accompany it.
 
-Target: RTX4090 10de:2684 / 10de:167c, VBIOS95.02.18.80.EF, 24GiB,
+Target: RTX4090 10de:2684 / 10de:167c, VBIOS 95.02.18.80.EF, 24GiB,
 ASUS W890E-SAGE SE BIOS0402 with two Arc Pro B50 display devices.
 Adaptations cover workstation enumeration/BARs, inactive GOP children, full
 preflight logging, strict selectors and effective readout, and Secure Boot policy.
