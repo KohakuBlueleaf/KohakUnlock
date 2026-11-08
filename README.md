@@ -88,6 +88,7 @@ Inventory uses OS metadata and `nvidia-smi`, not BAR mmap or resets. Output is p
 - Ampere: external [Zagitta/gpu-unlock](https://github.com/Zagitta/gpu-unlock); not vendored here.
 - The TU104 RTX 2060 port in this fork is **source-only and unvalidated**: offline host tests with a synthetic profile pass, but no hardware run has occurred; it requires its own PROM-derived profile (see docs/TU104-2060.md).
 - Other boards, 11 GiB variants, Windows, Ada and Blackwell: **not validated here**.
+- Control, not an unlock: two stock TITAN RTX cards (`10de:1e02`/`10de:12a3`) already measure full-rate FP16→FP32 with mmapeak. [Details](docs/RESULTS.md#factory-full-rate-control-titan-rtx-no-unlock-applied).
 - Ada: one RTX 4090 Windows/UEFI manual USB unlock on ASUS Pro WS W890E-SAGE SE, NVIDIA 621.01, 450 W. Signed EFI, successful trial with Secure Boot off. [Source](windows/ad102) and [results](docs/ADA-WINDOWS.md).
 - Other board profiles and Blackwell remain research targets.
 

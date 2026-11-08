@@ -54,6 +54,34 @@ Both saved reports have benchmark script SHA256 `64b4ed9fed4c50da812c8c3529aa9cc
 
 **Not a controlled A/B:** stock power cap 370 W, unlocked cap 360 W; cooling, clocks and thermal history differ. Stock swept 4096 and 8192, while the unlocked comparison ran 8192 only. Percentages are calculated from unrounded medians. A separate recovered-stock run also measured approximately 73.40 FP16 / 73.60 BF16 / 38.37 TF32 / 25.52 FP32 TFLOPS, illustrating variation, particularly in the FP32 control. No individual stock baselines were recovered for the remaining three cards.
 
+## Factory full-rate control: TITAN RTX (no unlock applied)
+
+A control from an unmodified TITAN RTX. **No module, firmware or boot change was applied.** It tests whether a TU102 card ships with the half-rate FP16→FP32 limit. On the cards below, it does not, so this project has nothing to unlock there.
+
+Cards: two hosts, one card each. TU102 rev a1, PCI ID `10de:1e02`, subsystem `10de:12a3`, VBIOS `90.02.42.00.0F`, stock 24 GB, 72 SMs, 280 W limit.
+
+- Host 1: kernel 5.15.0-139, NVIDIA 550.78.
+- Host 2: kernel 6.8.0-64, NVIDIA 570.169.
+
+Benchmark: [mmapeak](https://github.com/KohakuBlueleaf/mmapeak) at `cb43e95423be799eeb038cce0dfca1ba1c5572a8`, built with CUDA 12.1 for `sm_75`, run with `-t 1 -r 3`, seed 12345 (randomized inputs). Clocks were not locked.
+
+| Instruction | Host 1 | Host 2 | Unit |
+|---|---:|---:|---|
+| FP16→FP16 16×16×16 | 140.1 | 140.9 | TFLOPS |
+| FP16→FP16 32×8×16 | 139.7 | 140.7 | TFLOPS |
+| FP16→FP32 16×16×16 | 136.5 | 137.5 | TFLOPS |
+| FP16→FP32 32×8×16 | 136.8 | 137.9 | TFLOPS |
+| INT8→INT32 16×16×16 | 260.9 | 262.2 | TOPS |
+| INT8→INT32 32×8×16 | 259.4 | 260.6 | TOPS |
+| Scalar FP32 FMA | 17.5 | 17.5 | TFLOPS |
+
+FP16→FP32 runs at about 0.97–0.98× FP16→FP16. A locked 2080 Ti runs at about 0.50× (59.9 vs 119.5 above). This matches TITAN RTX being marketed with full-rate FP32 accumulation. It is only an observation for these two cards and this VBIOS, not a claim about every TU102 SKU.
+
+### Related observations, not unlock results
+
+- **Pascal GP104 has nothing to unlock.** GTX 1080 (`sm_61`) has no tensor-core MMA. Its packed FP16 (`HFMA2`) rate is a silicon property: we measured 0.15 TFLOPS against 7.4 TFLOPS FP32 FMA and 36 TOPS INT8 `DP4A`, with a separate randomized chained-accumulator probe. KohakUnlock does not apply.
+- **Quantized LLM decode probably will not speed up.** Low-bit GGUF inference in llama.cpp, for example IQ1_M decode through `mmvq`/`vec_dot` with `__dp4a`, runs on INT8 dot-product paths. The INT8 rows in the 2080 Ti A/B above are flat before and after the unlock. So quantized-decode speedups should not be expected from this unlock alone. FP16 GEMM-heavy workloads (training, FP16 prefill) are the plausible beneficiaries. This is a source-path observation; no end-to-end LLM A/B was run.
+
 ## What is NOT established
 
 Turing numerical correctness has not been independently certified by the local public-repo measurement record; the recorded runs here are throughput tests and healthy-driver checks. Upstream's own correctness results apply to its hardware/profile, not automatically this port. A local validation script was drafted during development but its successful execution was not recorded; do not turn that into a pass claim. Independent numerical, memory-integrity and sustained thermal/endurance testing remains required.
