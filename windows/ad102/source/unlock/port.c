@@ -15,7 +15,7 @@ BOOLEAN GuSafeToReturn(VOID) {
 }
 VOID *GuAlloc(size_t N) {
   VOID *Memory=NULL;
-  if(!N || !Gu.bs || EFI_ERROR(Gu.bs->AllocatePool(EfiLoaderData,N,&Memory)))return NULL;
+  if(!N || !Gu.bs || EFI_ERROR(Gu.bs->AllocatePool(EfiBootServicesData,N,&Memory)))return NULL;
   memset(Memory,0,N);return Memory;
 }
 VOID GuFree(VOID *Memory) {
