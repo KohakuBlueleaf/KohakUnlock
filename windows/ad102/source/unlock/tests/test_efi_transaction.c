@@ -219,7 +219,10 @@ static VOID check_stock_signature(void) {
   CHECK(!memcmp(dma_pointer(le64(meta+72),4096),GuAssets[2].firmware.data+signature.offset,4096));
 }
 static EFI_STATUS EFIAPI allocate_pool(EFI_MEMORY_TYPE type,UINTN size,VOID **memory) {
-  CHECK(type==EfiLoaderData && fake.pool_count<MAX_POOLS);
+  /* Real firmware may serve GSP staging pools as either EfiLoaderData or
+     EfiBootServicesData (observed: BIOS 4003 starves EfiLoaderData to ~1MB,
+     GuLoadAssets then fails with EFI_OUT_OF_RESOURCES) - accept both. */
+  CHECK((type==EfiLoaderData || type==EfiBootServicesData) && fake.pool_count<MAX_POOLS);
   *memory=calloc(1,size);if(!*memory)return EFI_OUT_OF_RESOURCES;
   pools[fake.pool_count++]=(TEST_POOL){*memory,FALSE};fake.pool_live++;return EFI_SUCCESS;
 }

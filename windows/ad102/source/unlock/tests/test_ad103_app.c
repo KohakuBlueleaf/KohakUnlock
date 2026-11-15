@@ -382,7 +382,12 @@ static EFI_STATUS EFIAPI bar_info(EFI_PCI_IO_PROTOCOL *p,UINT8 bar,UINT64 *suppo
   EFI_ACPI_ADDRESS_SPACE_DESCRIPTOR *r;
   CHECK(!EFI_ERROR(allocate_pool(EfiLoaderData,sizeof(*r)+2,(VOID **)&r)));
   r->Desc=ACPI_ADDRESS_SPACE_DESCRIPTOR;r->Len=sizeof(*r)-3;r->ResType=0;r->AddrSpaceGranularity=32;
-  r->AddrRangeMin=0x80000000;r->AddrRangeMax=0x80ffffff;r->AddrLen=app_mode==APP_BAD_BAR?4096:0x1000000;
+  /* BarCheck derives the BAR base from the captured config (firmware may
+     relocate BAR0); describe the SAME base the fixture carries instead of
+     a literal, so mock and runtime cannot disagree. */
+  r->AddrRangeMin=*(const UINT32 *)(config+0x10)&~15U;
+  r->AddrRangeMax=r->AddrRangeMin+0xffffff;
+  r->AddrLen=app_mode==APP_BAD_BAR?4096:0x1000000;
   if(extra_case==106){r->AddrRangeMin=0xd5000000;r->AddrRangeMax=0xd5ffffff;}
   if(app_mode==APP_BAR_MAX)r->AddrRangeMax=0x83000000;
   /* Pinned EDK2 PciIo.c returns PciBar.Alignment, not the inclusive end. */
